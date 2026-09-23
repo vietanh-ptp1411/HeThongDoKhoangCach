@@ -1,0 +1,26 @@
+<Window x:Class="HeThongDoKhoangCach.Views.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Đăng nhập người kiểm tra" Width="420" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource BgBrush}" FontFamily="Segoe UI" FontSize="13">
+
+    <Border Style="{StaticResource Card}" Margin="14" Padding="18,16">
+        <StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Path Data="{StaticResource IconUser}" Style="{StaticResource IconStroke}" Width="22" Height="22"/>
+                <TextBlock Text="ĐĂNG NHẬP" Style="{StaticResource CardTitle}" FontSize="15" Margin="10,0,0,0"/>
+            </StackPanel>
+
+            <TextBlock Text="Mã người kiểm tra (Người KT)" Foreground="{StaticResource TextMutedBrush}" Margin="0,16,0,4"/>
+            <TextBox x:Name="CodeBox" Style="{StaticResource FieldTextBox}" Height="36" FontSize="15" KeyDown="CodeBox_KeyDown"/>
+            <TextBlock Text="Mã này sẽ được ghi vào cột 'Người kiểm tra' của các kết quả đo tiếp theo."
+                       Foreground="{StaticResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                <Button Content="Đăng nhập" Style="{StaticResource PrimaryButton}" Width="120" Click="Ok_Click" IsDefault="True"/>
+                <Button Content="Hủy" Style="{StaticResource OutlineButton}" Width="90" Height="36" Margin="8,0,0,0" Click="Cancel_Click" IsCancel="True"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

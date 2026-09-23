@@ -1,0 +1,207 @@
+<Window x:Class="HeThongDoKhoangCach.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:HeThongDoKhoangCach.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
+        Title="Cài đặt hệ thống" Width="980" Height="820" MinWidth="820" MinHeight="600"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource BgBrush}" FontFamily="Segoe UI" FontSize="13">
+
+    <Window.Resources>
+        <Style TargetType="TextBox" x:Key="InputBox">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="Margin" Value="0,4"/>
+            <Setter Property="BorderBrush" Value="{StaticResource FieldBorderBrush}"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Hint">
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+            <StackPanel>
+
+                <!-- ===== Kết nối PLC ===== -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="KẾT NỐI PLC"/>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Label}" Text="Giao thức"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Height="30" Margin="0,4"
+                                      ItemsSource="{x:Static vm:SettingsViewModel.Protocols}"
+                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                      SelectedValue="{Binding Protocol}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Label}" Text="Địa chỉ IP PLC"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding IpAddress}" IsEnabled="{Binding IsNetworkProtocol}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Label}" Text="Port" Margin="16,0,12,0"/>
+                            <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource InputBox}" Text="{Binding Port}" IsEnabled="{Binding IsNetworkProtocol}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Label}" Text="Unit ID (Modbus)"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding UnitId}" IsEnabled="{Binding IsModbus}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Label}" Text="Chu kỳ đọc (ms)" Margin="16,0,12,0"/>
+                            <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource InputBox}" Text="{Binding PollIntervalMs}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Label}" Text="Timeout (ms)"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding TimeoutMs}"/>
+                            <Button Grid.Row="3" Grid.Column="3" Content="Kiểm tra kết nối" Style="{StaticResource PrimaryButton}"
+                                    Height="30" HorizontalAlignment="Left" Margin="0,4" Command="{Binding TestConnectionCommand}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Text="{Binding TestResult}" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Bảng địa chỉ ===== -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="Mặc định MC" Style="{StaticResource SmallButton}" Command="{Binding UseMcDefaultsCommand}" Margin="0,0,8,0"/>
+                                <Button Content="Mặc định Modbus" Style="{StaticResource SmallButton}" Command="{Binding UseModbusDefaultsCommand}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="BẢNG ĐỊA CHỈ PLC (TAGS)" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="PLC cung cấp dữ liệu gì thì điền địa chỉ tag đó; ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (serial nhập tại máy tính, tra file master, quy cách theo chủng loại, tự so OK/NG, tự đếm). Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Kiểu String: chuỗi ASCII 2 ký tự/word, 'Độ dài' = số word; thứ tự word quyết định byte nào là ký tự trước (Mitsubishi LowHigh, Modbus thường HighLow). Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/>
+                        <DataGrid Style="{StaticResource EditGrid}" ItemsSource="{Binding Tags}" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,10,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Nhóm" Binding="{Binding Group}" IsReadOnly="True" Width="90"/>
+                                <DataGridTextColumn Header="Tag" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*"/>
+                                <DataGridTextColumn Header="Địa chỉ" Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                <DataGridComboBoxColumn Header="Kiểu dữ liệu" Width="105"
+                                                        ItemsSource="{x:Static vm:SettingsViewModel.DataTypes}"
+                                                        SelectedItemBinding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"/>
+                                <DataGridTextColumn Header="Độ dài" Binding="{Binding Length, UpdateSourceTrigger=PropertyChanged}" Width="65"/>
+                                <DataGridTextColumn Header="Hệ số" Binding="{Binding Scale, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
+                                <DataGridComboBoxColumn Header="Thứ tự word" Width="105"
+                                                        ItemsSource="{x:Static vm:SettingsViewModel.WordOrders}"
+                                                        SelectedItemBinding="{Binding WordOrder, UpdateSourceTrigger=PropertyChanged}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Quy cách ===== -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="Thêm dòng" Style="{StaticResource SmallButton}" Command="{Binding AddSpecCommand}" Margin="0,0,8,0"/>
+                                <Button Content="Xóa dòng đã chọn" Style="{StaticResource SmallButton}" Command="{Binding RemoveSpecCommand}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="QUY CÁCH THEO CHỦNG LOẠI" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Chủng loại phải trùng với cột Model trong file master. Nhóm histogram dùng để gộp các chủng loại có cùng quy cách vào một biểu đồ phân bố."/>
+                        <DataGrid Style="{StaticResource EditGrid}" ItemsSource="{Binding ModelSpecs}" SelectedItem="{Binding SelectedSpec}"
+                                  CanUserAddRows="False" CanUserDeleteRows="True" Margin="0,10,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Chủng loại" Binding="{Binding Model, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                <DataGridTextColumn Header="Nhóm histogram" Binding="{Binding Group, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                <DataGridTextColumn Header="LSL" Binding="{Binding Lsl, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90"/>
+                                <DataGridTextColumn Header="USL" Binding="{Binding Usl, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90"/>
+                                <DataGridTextColumn Header="Đơn vị" Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Khác ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="THÔNG TIN CHUNG &amp; DỮ LIỆU"/>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Label}" Text="Tiêu đề hệ thống"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding Title}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Label}" Text="Nhãn đơn vị / công ty"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding CompanyLabel}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Label}" Text="Mã người kiểm tra"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding Inspector}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Label}" Text="Đơn vị lực căng"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding ForceUnit}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Label}" Text="File master BISG (CSV)"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding MasterFilePath}"/>
+                            <Button Grid.Row="4" Grid.Column="2" Content="Chọn..." Style="{StaticResource SmallButton}" Margin="8,4,0,4" Click="BrowseMaster_Click"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource Label}" Text="Số ngày trên trend chart"/>
+                            <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding TrendDays}" Width="120" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
+                            <TextBox Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
+
+                            <CheckBox Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
+                                      Content="Tự động lưu kết quả ngay khi đã phân định PASS/NG (tắt nếu muốn bấm LƯU DỮ LIỆU thủ công)"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. File master gồm các cột: Key, OrderNo, Line, Model – Key là serial đầy đủ hoặc tiền tố serial (phần trước dấu gạch ngang)."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Lưu &amp; áp dụng" Style="{StaticResource PrimaryButton}" Width="150" Click="Save_Click" Margin="0,0,10,0"/>
+            <Button Content="Hủy" Style="{StaticResource SmallButton}" Width="110" Height="38" FontSize="14" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
