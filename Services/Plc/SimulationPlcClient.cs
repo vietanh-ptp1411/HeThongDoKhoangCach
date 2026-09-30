@@ -3,31 +3,22 @@ using HeThongDoKhoangCach.Models;
 namespace HeThongDoKhoangCach.Services.Plc;
 
 /// <summary>
-/// PLC mô phỏng "làm hết mọi việc" như PLC thật của BISG: sau START, mỗi chu kỳ PLC
-/// tự "scan" một serial (ghi serial, đơn hàng, line, chủng loại, quy cách vào thanh ghi),
-/// đo trong 1.5 giây, ghi kết quả, phân định OK/NG, tăng bộ đếm rồi bật bit Đo xong.
-/// Chu kỳ tiếp theo bắt đầu sau 6 giây. Phần mềm chỉ đọc và hiển thị.
+/// PLC mô phỏng theo luồng vận hành của khách hàng:
+/// phần mềm bật bit START (máy chạy) / STOP (tạm dừng) / RESET (xóa giá trị) và bật bit chủng loại (M40..M50) khi chọn model;
+/// khi máy đang chạy và đã có chủng loại, đo liên tục: mỗi lượt mất 1,5 giây, ghi kết quả đo,
+/// phân định OK/NG, tăng bộ đếm rồi bật bit Đo xong (giữ 0,6 giây), nghỉ 3 giây rồi đo tiếp đến khi STOP.
+/// Lực căng và khoảng cách được cập nhật liên tục ở mỗi lần đọc.
 /// </summary>
 public sealed class SimulationPlcClient : IPlcClient
 {
-    private sealed record Product(string Model, string OrderNo, string Line, string SerialPrefix, double Lsl, double Usl);
+    private static readonly TimeSpan MeasureDuration = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan DonePulse = TimeSpan.FromSeconds(0.6);
+    private static readonly TimeSpan CycleGap = TimeSpan.FromSeconds(3);
 
-    private static readonly Product[] Products =
-    [
-        new("CPX",     "BB09320001", "WAA2", "985X57200-", 3.0, 4.0),
-        new("NF 8.3",  "BB09319998", "WAA1", "CP201111-",  3.0, 5.0),
-        new("GSM RUP", "BB09319996", "WAA3", "GS0501-",    3.0, 4.0),
-        new("M1-M2",   "BB09319997", "WAA4", "WA01-",      3.0, 5.0),
-        new("PP1",     "BB09319995", "WAA5", "PP0101-",    3.0, 5.0),
-    ];
-
-    private static readonly TimeSpan ScanDelay = TimeSpan.FromSeconds(0.4);      // scan xong → bắt đầu đo
-    private static readonly TimeSpan MeasureDuration = TimeSpan.FromSeconds(1.5); // thời gian đo
-    private static readonly TimeSpan CycleGap = TimeSpan.FromSeconds(6);          // đo xong → sản phẩm kế tiếp
-
-    private enum Phase { Idle, Scanned, Measuring, Done }
+    private enum Phase { Idle, Measuring, Done }
 
     private readonly PlcSettings _s;
+    private readonly IReadOnlyList<SpecDefinition> _specs;
     private readonly Dictionary<string, ushort> _words = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _bits = new(StringComparer.OrdinalIgnoreCase);
     private readonly Random _rng = new();
@@ -35,17 +26,18 @@ public sealed class SimulationPlcClient : IPlcClient
 
     private bool _running;
     private Phase _phase = Phase.Idle;
-    /// <summary>Thời điểm bắt đầu chu kỳ (scan) hoặc thời điểm Đo xong – tùy pha.</summary>
     private DateTime _phaseAt;
-    private int _productIndex;
-    private int _serialCounter = 100;
     private int _total, _ok, _ng;
-    private Product _current = Products[0];
+    private double _lsl = 3.0, _usl = 4.0;
     private double _target = 3.70;
     private double _distance = 3.70;
-    private double _force = 101.0;
+    private double _force = 2.0;
 
-    public SimulationPlcClient(PlcSettings settings) => _s = settings;
+    public SimulationPlcClient(PlcSettings settings, IReadOnlyList<SpecDefinition> specs)
+    {
+        _s = settings;
+        _specs = specs;
+    }
 
     public bool IsConnected { get; private set; }
 
@@ -55,7 +47,7 @@ public sealed class SimulationPlcClient : IPlcClient
         lock (_gate)
         {
             SetBit(_s.LoadcellStable.Address, true);
-            PublishStatic();
+            PublishCounters();
         }
         return Task.CompletedTask;
     }
@@ -123,7 +115,6 @@ public sealed class SimulationPlcClient : IPlcClient
             if (Same(address, _s.StartCommand.Address))
             {
                 _running = true;
-                BeginCycle();
                 SetBit(address, false);          // PLC tự xóa bit lệnh
             }
             else if (Same(address, _s.StopCommand.Address))
@@ -135,20 +126,14 @@ public sealed class SimulationPlcClient : IPlcClient
             }
             else if (Same(address, _s.ResetCommand.Address))
             {
-                _running = false;
                 _phase = Phase.Idle;
+                _running = false;
                 _total = _ok = _ng = 0;
                 SetBit(_s.MeasureDone.Address, false);
                 SetBit(_s.JudgeOk.Address, false);
                 SetBit(_s.JudgeNg.Address, false);
-                StoreString(_s.SerialText, "");
-                StoreString(_s.OrderNoText, "");
-                StoreString(_s.LineText, "");
-                StoreString(_s.ModelText, "");
                 StoreNumber(_s.ResultValue, 0);
-                StoreNumber(_s.SpecLsl, 0);
-                StoreNumber(_s.SpecUsl, 0);
-                PublishStatic();
+                PublishCounters();
                 SetBit(address, false);
             }
         }
@@ -162,32 +147,43 @@ public sealed class SimulationPlcClient : IPlcClient
         if (!IsConnected) throw new PlcException("PLC mô phỏng chưa kết nối");
     }
 
-    /// <summary>Bắt đầu một sản phẩm: PLC "nhận serial từ máy quét" và điền thông tin.</summary>
-    private void BeginCycle()
+    /// <summary>Quy cách hiện hành: theo LSL/USL phần mềm ghi xuống (nếu có), không thì theo bit chủng loại đang bật.</summary>
+    private bool TryResolveSpec()
     {
-        _current = Products[_productIndex % Products.Length];
-        _productIndex++;
-        _serialCounter++;
+        if (_s.SpecLslWrite.IsConfigured && _s.SpecUslWrite.IsConfigured)
+        {
+            double lsl = ReadNumber(_s.SpecLslWrite), usl = ReadNumber(_s.SpecUslWrite);
+            if (usl > lsl) { _lsl = lsl; _usl = usl; return true; }
+        }
+        foreach (var spec in _specs)
+        {
+            if (spec.Models.Any(m => m.HasPlcBit && IsModelBitSet(m.PlcBit)) && spec.Usl > spec.Lsl)
+            {
+                _lsl = spec.Lsl;
+                _usl = spec.Usl;
+                return true;
+            }
+        }
+        return false;
+    }
 
-        StoreString(_s.SerialText, $"{_current.SerialPrefix}{_serialCounter:00000}");
-        StoreString(_s.OrderNoText, _current.OrderNo);
-        StoreString(_s.LineText, _current.Line);
-        StoreString(_s.ModelText, _current.Model);
-        StoreNumber(_s.SpecLsl, _current.Lsl);
-        StoreNumber(_s.SpecUsl, _current.Usl);
-        SetBit(_s.MeasureDone.Address, false);
-        SetBit(_s.JudgeOk.Address, false);
-        SetBit(_s.JudgeNg.Address, false);
+    private bool IsModelBitSet(string bit)
+    {
+        var (prefix, number) = Split(bit);
+        return _bits.GetValueOrDefault(Key(prefix, number));
+    }
 
+    private void BeginMeasure(DateTime now)
+    {
         // ≈85% trong quy cách, còn lại lệch ra ngoài
         bool inSpec = _rng.NextDouble() < 0.85;
-        double span = _current.Usl - _current.Lsl;
+        double span = _usl - _lsl;
         _target = inSpec
-            ? _current.Lsl + span * (0.2 + _rng.NextDouble() * 0.6)
-            : (_rng.NextDouble() < 0.5 ? _current.Lsl - 0.1 - _rng.NextDouble() * 0.4 : _current.Usl + 0.1 + _rng.NextDouble() * 0.6);
-
-        _phase = Phase.Scanned;
-        _phaseAt = DateTime.UtcNow;
+            ? _lsl + span * (0.2 + _rng.NextDouble() * 0.6)
+            : (_rng.NextDouble() < 0.5 ? _lsl - 0.1 - _rng.NextDouble() * 0.4 : _usl + 0.1 + _rng.NextDouble() * 0.6);
+        SetBit(_s.MeasureDone.Address, false);
+        _phase = Phase.Measuring;
+        _phaseAt = now;
     }
 
     /// <summary>Cập nhật thanh ghi mô phỏng theo thời gian thực (gọi ở mỗi lần đọc).</summary>
@@ -196,44 +192,52 @@ public sealed class SimulationPlcClient : IPlcClient
         lock (_gate)
         {
             var now = DateTime.UtcNow;
-            _force = 101.0 + (_rng.NextDouble() - 0.5) * 0.6;
+            _force = 2.0 + (_rng.NextDouble() - 0.5) * 0.6;
 
-            // Pha được tính theo thời gian trôi qua kể từ đầu chu kỳ, không phụ thuộc tần suất đọc.
             switch (_phase)
             {
-                case Phase.Scanned or Phase.Measuring:
+                case Phase.Idle:
+                    _distance = 3.70 + (_rng.NextDouble() - 0.5) * 0.06;
+                    if (_running && TryResolveSpec()) BeginMeasure(now);
+                    break;
+
+                case Phase.Measuring:
                 {
-                    var sinceScan = now - _phaseAt;
-                    if (sinceScan >= ScanDelay + MeasureDuration)
+                    if (!_running || !TryResolveSpec())
+                    {
+                        _phase = Phase.Idle;
+                        break;
+                    }
+                    var elapsed = now - _phaseAt;
+                    if (elapsed >= MeasureDuration)
                     {
                         _distance = Math.Round(_target, 2);
-                        bool ok = _distance >= _current.Lsl && _distance <= _current.Usl;
+                        bool ok = _distance >= _lsl && _distance <= _usl;
                         _total++;
                         if (ok) _ok++; else _ng++;
                         StoreNumber(_s.ResultValue, _distance);
                         SetBit(_s.JudgeOk.Address, ok);
                         SetBit(_s.JudgeNg.Address, !ok);
-                        PublishStatic();
+                        PublishCounters();
                         SetBit(_s.MeasureDone.Address, true);   // bật cuối cùng, sau khi mọi dữ liệu đã sẵn
                         _phase = Phase.Done;
                         _phaseAt = now;
                     }
-                    else if (sinceScan >= ScanDelay)
+                    else
                     {
-                        _phase = Phase.Measuring;
-                        double remain = (ScanDelay + MeasureDuration - sinceScan).TotalSeconds;
+                        double remain = (MeasureDuration - elapsed).TotalSeconds;
                         _distance = _target + (_rng.NextDouble() - 0.5) * 0.4 * remain;
                     }
                     break;
                 }
 
-                case Phase.Done when _running && now - _phaseAt >= CycleGap:
-                    BeginCycle();
+                case Phase.Done:
+                {
+                    var elapsed = now - _phaseAt;
+                    if (elapsed >= DonePulse) SetBit(_s.MeasureDone.Address, false);
+                    if (elapsed >= CycleGap) _phase = Phase.Idle;
                     break;
-
-                case Phase.Idle:
-                    _distance = 3.70 + (_rng.NextDouble() - 0.5) * 0.06;
-                    break;
+                }
             }
 
             SetBit(_s.RunningState.Address, _running);
@@ -242,11 +246,21 @@ public sealed class SimulationPlcClient : IPlcClient
         }
     }
 
-    private void PublishStatic()
+    private void PublishCounters()
     {
         StoreNumber(_s.TotalCount, _total);
         StoreNumber(_s.OkCount, _ok);
         StoreNumber(_s.NgCount, _ng);
+    }
+
+    private double ReadNumber(TagDefinition tag)
+    {
+        if (!tag.IsConfigured || tag.DataType is TagDataType.Bit or TagDataType.String) return 0;
+        var (prefix, number) = Split(tag.Address);
+        var words = new ushort[tag.WordCount];
+        for (int i = 0; i < words.Length; i++)
+            words[i] = _words.GetValueOrDefault(Key(prefix, number + i));
+        return TagCodec.Decode(tag, words);
     }
 
     private void StoreNumber(TagDefinition tag, double value)
@@ -254,18 +268,8 @@ public sealed class SimulationPlcClient : IPlcClient
         if (!tag.IsConfigured) return;
         if (tag.DataType == TagDataType.Bit) { SetBit(tag.Address, value != 0); return; }
         if (tag.DataType == TagDataType.String) return;
-        WriteWords(tag.Address, TagCodec.Encode(tag, value));
-    }
-
-    private void StoreString(TagDefinition tag, string text)
-    {
-        if (!tag.IsConfigured || tag.DataType != TagDataType.String) return;
-        WriteWords(tag.Address, TagCodec.EncodeString(tag, text));
-    }
-
-    private void WriteWords(string address, ushort[] words)
-    {
-        var (prefix, number) = Split(address);
+        var (prefix, number) = Split(tag.Address);
+        var words = TagCodec.Encode(tag, value);
         for (int i = 0; i < words.Length; i++)
             _words[Key(prefix, number + i)] = words[i];
     }

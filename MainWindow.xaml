@@ -8,10 +8,11 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
-        Width="1600" Height="940" MinWidth="1200" MinHeight="780"
+        Width="1600" Height="940" MinWidth="1200" MinHeight="760"
         WindowStartupLocation="CenterScreen" WindowState="Maximized"
         Background="{StaticResource BgBrush}" FontFamily="Segoe UI"
-        UseLayoutRounding="True" SnapsToDevicePixels="True">
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        PreviewTextInput="Window_PreviewTextInput">
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
@@ -24,429 +25,237 @@
         <Border Grid.Row="0" Background="{StaticResource HeaderBrush}" CornerRadius="6" Height="54" Margin="0,0,0,10">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Style="{StaticResource HomeButton}" Margin="10,0,0,0" Click="Home_Click" AutomationProperties.Name="HOME" ToolTip="Về ô scan serial">
-                    <Path Data="{StaticResource IconHome}" Style="{StaticResource IconFill}" Fill="{StaticResource HeaderBrush}" Width="20" Height="20"/>
-                </Button>
+                <TextBlock Grid.Column="0" Text="{Binding Title}" Foreground="White" FontSize="20" FontWeight="Bold"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="18,0,12,0"/>
 
-                <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="White" FontSize="20" FontWeight="Bold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0"/>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding CompanyLabel}" Foreground="White" Opacity="0.85" FontSize="12.5" FontStyle="Italic"
+                               VerticalAlignment="Center" Margin="0,0,14,0"/>
                     <Border Style="{StaticResource HeaderPill}">
                         <StackPanel Orientation="Horizontal">
                             <Path Data="{StaticResource IconCalendar}" Style="{StaticResource IconStroke}" Stroke="White" Width="15" Height="15"/>
                             <TextBlock Text="{Binding Now, StringFormat='{}{0:dd/MM/yyyy}'}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource HeaderPill}" Margin="8,0,0,0">
+                    <Border Style="{StaticResource HeaderPill}" Margin="6,0,0,0">
                         <StackPanel Orientation="Horizontal">
                             <Path Data="{StaticResource IconClock}" Style="{StaticResource IconStroke}" Stroke="White" Width="15" Height="15"/>
                             <TextBlock Text="{Binding Now, StringFormat='{}{0:HH:mm:ss}'}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
+
+                    <Rectangle Width="1" Height="26" Fill="#4A6FAA" Margin="14,0,8,0"/>
+
+                    <Button Style="{StaticResource HeaderButton}" Command="{Binding OpenSettingsCommand}" AutomationProperties.Name="CÀI ĐẶT" ToolTip="Cài đặt kết nối PLC, bảng địa chỉ, chủng loại, mã QR">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource IconGear}" Style="{StaticResource IconFill}" Fill="White" Width="14" Height="14"/>
+                            <TextBlock Text="CÀI ĐẶT" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource HeaderButton}" Command="{Binding OpenStatisticsCommand}" AutomationProperties.Name="THỐNG KÊ" ToolTip="Thống kê OK/NG, trung bình, Cpk theo chủng loại và line">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource IconBars}" Style="{StaticResource IconFill}" Fill="White" Width="14" Height="14"/>
+                            <TextBlock Text="THỐNG KÊ" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource HeaderButton}" Command="{Binding OpenReportCommand}" AutomationProperties.Name="BÁO CÁO" ToolTip="Báo cáo chi tiết với bộ lọc theo line, chủng loại, kết quả">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource IconReport}" Style="{StaticResource IconStroke}" Stroke="White" Width="14" Height="14"/>
+                            <TextBlock Text="BÁO CÁO" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource HeaderButton}" Command="{Binding LoginCommand}" AutomationProperties.Name="ĐĂNG NHẬP" ToolTip="Đặt mã người kiểm tra">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource IconUser}" Style="{StaticResource IconStroke}" Stroke="White" Width="14" Height="14"/>
+                            <TextBlock Text="ĐĂNG NHẬP" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- ================= THÂN ================= -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="380"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- ===== Cột trái ===== -->
+            <Grid.ColumnDefinitions><ColumnDefinition Width="330"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Grid Grid.Column="0" Margin="0,0,10,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- LOADCELL -->
-                <Border Grid.Row="0" Style="{StaticResource Card}" Padding="0" Margin="0,0,0,6">
-                    <Grid Height="80">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Rectangle Grid.Column="0" Width="4" Fill="{StaticResource AccentBrush}" RadiusX="2" RadiusY="2" Margin="0,10"/>
-                        <Border Grid.Column="1" Style="{StaticResource IconBox}" Margin="12,0,0,0">
-                            <Path Data="{StaticResource IconLoadcell}" Style="{StaticResource IconFill}" Width="28" Height="28"/>
-                        </Border>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="14,0,10,0">
-                            <TextBlock Text="LOADCELL" Style="{StaticResource SectionTitle}"/>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding ForceText}" Style="{StaticResource BigValue}"/>
-                                <TextBlock Text="{Binding ForceUnit}" Style="{StaticResource UnitText}" Margin="8,0,0,9" VerticalAlignment="Bottom"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- KHOẢNG CÁCH -->
-                <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" Margin="0,0,0,6">
-                    <Grid Height="80">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Rectangle Grid.Column="0" Width="4" Fill="{StaticResource AccentBrush}" RadiusX="2" RadiusY="2" Margin="0,10"/>
-                        <Border Grid.Column="1" Style="{StaticResource IconBox}" Margin="12,0,0,0">
-                            <Path Data="{StaticResource IconRuler}" Style="{StaticResource IconStroke}" Width="30" Height="30"/>
-                        </Border>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="14,0,10,0">
-                            <TextBlock Text="KHOẢNG CÁCH" Style="{StaticResource SectionTitle}"/>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding DistanceText}" Style="{StaticResource BigValue}"/>
-                                <TextBlock Text="mm" Style="{StaticResource UnitText}" Margin="8,0,0,9" VerticalAlignment="Bottom"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- THÔNG TIN ĐƠN HÀNG -->
-                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="10,8" Margin="0,0,0,6">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconClipboard}" Style="{StaticResource IconStroke}" Width="17" Height="17"/>
-                            <TextBlock Text="THÔNG TIN ĐƠN HÀNG" Style="{StaticResource SectionTitle}" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Ô scan serial -->
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Path Grid.Column="0" Data="{StaticResource IconBarcode}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="20" Height="20" Margin="0,0,8,0"/>
-                            <Grid Grid.Column="1">
-                                <TextBox x:Name="SerialBox" Style="{StaticResource FieldTextBox}"
-                                         Text="{Binding SerialInput, UpdateSourceTrigger=PropertyChanged}"
-                                         IsReadOnly="{Binding SerialFromPlc}"
-                                         KeyDown="SerialBox_KeyDown" ToolTip="{Binding SerialPlaceholder}"/>
-                                <TextBlock Text="{Binding SerialPlaceholder}" Style="{StaticResource PlaceholderText}">
-                                    <TextBlock.Visibility>
-                                        <Binding Path="SerialInput" Converter="{x:Static vm:EmptyToVisibleConverter.Instance}"/>
-                                    </TextBlock.Visibility>
-                                </TextBlock>
+                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}" Padding="14">
+                        <StackPanel>
+                            <TextBlock Text="THÔNG TIN ĐO" Style="{StaticResource SectionTitle}" Margin="0,0,0,10"/>
+                            <Grid IsEnabled="{Binding CanEditSelection}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <TextBlock Text="1. Quy cách" Style="{StaticResource FormLabel}"/>
+                                <ComboBox Grid.Column="1" x:Name="SpecBox" ItemsSource="{Binding Specs}" SelectedItem="{Binding SelectedSpec}" DisplayMemberPath="Name" MinHeight="32" Margin="0,0,0,6" AutomationProperties.Name="Quy cách"/>
+                                <TextBlock Grid.Row="1" Text="2. Chủng loại" Style="{StaticResource FormLabel}"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="ModelBox" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}" DisplayMemberPath="Name" MinHeight="32" Margin="0,0,0,6" AutomationProperties.Name="Chủng loại"/>
+                                <TextBlock Grid.Row="2" Text="3. Số serial" Style="{StaticResource FormLabel}"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="QrBox" Style="{StaticResource FieldTextBox}" Text="{Binding QrInput, UpdateSourceTrigger=PropertyChanged}" KeyDown="QrBox_KeyDown" ToolTip="{Binding QrPlaceholder}" AutomationProperties.Name="Scan serial"/>
                             </Grid>
-                        </Grid>
-
-                        <!-- Bảng 4 cột -->
-                        <Border Margin="0,8,0,0" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="4" Background="White">
-                            <StackPanel>
-                                <Border Background="{StaticResource TableHeaderBrush}" CornerRadius="3,3,0,0">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="1.1*"/>
-                                            <ColumnDefinition Width="1.6*"/>
-                                            <ColumnDefinition Width="0.7*"/>
-                                            <ColumnDefinition Width="1*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="DÒNG HÀNG" Style="{StaticResource TableHeaderText}"/>
-                                        <TextBlock Grid.Column="1" Text="SỐ MÁY" Style="{StaticResource TableHeaderText}"/>
-                                        <TextBlock Grid.Column="2" Text="LINE" Style="{StaticResource TableHeaderText}"/>
-                                        <TextBlock Grid.Column="3" Text="CHỦNG LOẠI" Style="{StaticResource TableHeaderText}"/>
-                                    </Grid>
-                                </Border>
-                                <Grid Margin="0,5" MinHeight="18">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="1.1*"/>
-                                        <ColumnDefinition Width="1.6*"/>
-                                        <ColumnDefinition Width="0.7*"/>
-                                        <ColumnDefinition Width="1*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding OrderNo}" Style="{StaticResource TableCellText}" ToolTip="{Binding OrderNo}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Serial}" Style="{StaticResource TableCellText}" ToolTip="{Binding Serial}"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding Line}" Style="{StaticResource TableCellText}"/>
-                                    <TextBlock Grid.Column="3" Text="{Binding Model}" Style="{StaticResource TableCellText}" ToolTip="{Binding Model}"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="{Binding StartHint}" Foreground="#C0392B" FontSize="11.5" TextWrapping="Wrap" Margin="0,6,0,0" MinHeight="16"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- QUY CÁCH / KẾT QUẢ -->
-                <UniformGrid Grid.Row="3" Columns="2" Margin="0,0,0,6">
-                    <Border Style="{StaticResource Card}" Padding="10,6" Margin="0,0,3,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconCaliper}" Style="{StaticResource IconStroke}" Stroke="{StaticResource TextMutedBrush}" Width="26" Height="26"/>
-                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="QUY CÁCH" Style="{StaticResource SectionTitle}"/>
-                                <TextBlock Text="{Binding SpecText}" Style="{StaticResource MidValue}"/>
-                            </StackPanel>
+                            <TextBlock Text="{Binding Serial, StringFormat=Serial: {0}}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            <WrapPanel Margin="0,4">
+                                <TextBlock Text="{Binding OrderNo, StringFormat=Đơn hàng: {0}}" Margin="0,0,12,0"/>
+                                <TextBlock Text="{Binding Line, StringFormat=Line: {0}}"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding ConditionText}" Foreground="{StaticResource TextMutedBrush}" Margin="0,4"/>
+                            <TextBlock Text="{Binding ScanHint}" Foreground="#C0392B" TextWrapping="Wrap" MinHeight="32" FontSize="12"/>
+                            <UniformGrid Columns="3" Margin="0,8,0,0">
+                                <Button Content="START" Style="{StaticResource StartButton}" Command="{Binding StartCommand}" Margin="0,0,4,0" AutomationProperties.Name="START"/>
+                                <Button Content="STOP" Style="{StaticResource StopButton}" Command="{Binding StopCommand}" Margin="4,0" AutomationProperties.Name="STOP"/>
+                                <Button Content="RESET" Style="{StaticResource ResetButton}" Command="{Binding ResetCommand}" Margin="4,0,0,0" AutomationProperties.Name="RESET"/>
+                            </UniformGrid>
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource Card}" Padding="10,6" Margin="3,0,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconTarget}" Style="{StaticResource IconStroke}" Stroke="{StaticResource TextMutedBrush}" Width="26" Height="26"/>
-                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="KẾT QUẢ" Style="{StaticResource SectionTitle}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding MeasuredValueText}" Style="{StaticResource MidValue}"/>
-                                    <TextBlock Text="mm" Style="{StaticResource UnitText}" FontSize="12" Margin="5,0,0,3" VerticalAlignment="Bottom"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </UniformGrid>
-
-                <!-- PHÂN ĐỊNH -->
-                <Border Grid.Row="4" CornerRadius="6" BorderThickness="1.5" Margin="0,0,0,6" MinHeight="76">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Background" Value="#F3F5F9"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding JudgeState}" Value="Pass">
-                                    <Setter Property="Background" Value="{StaticResource PassBgBrush}"/>
-                                    <Setter Property="BorderBrush" Value="{StaticResource PassBorderBrush}"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding JudgeState}" Value="Ng">
-                                    <Setter Property="Background" Value="{StaticResource NgBgBrush}"/>
-                                    <Setter Property="BorderBrush" Value="{StaticResource NgBorderBrush}"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding JudgeState}" Value="Waiting">
-                                    <Setter Property="Background" Value="{StaticResource MeasuringBgBrush}"/>
-                                    <Setter Property="BorderBrush" Value="{StaticResource MeasuringBorderBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Grid Grid.Column="0" Width="60" Height="60" Margin="18,0,6,0" VerticalAlignment="Center">
-                            <Path Data="{StaticResource IconShield}" Width="60" Height="60">
-                                <Path.Style>
-                                    <Style TargetType="Path" BasedOn="{StaticResource IconFill}">
-                                        <Setter Property="Fill" Value="{StaticResource NeutralIconBrush}"/>
+                    <Border Style="{StaticResource Card}" Margin="0,8,0,0" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="KẾT QUẢ ĐO (mm)" Style="{StaticResource SectionTitle}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding MeasuredValueText}" Style="{StaticResource BigValue}" FontSize="46" HorizontalAlignment="Center"/>
+                            <ctrl:QrCodeControl x:Name="ResultQr" Text="{Binding ResultQrText}" Width="160" Height="160" HorizontalAlignment="Center" AutomationProperties.Name="QR kết quả"/>
+                            <TextBlock Text="{Binding ResultQrText}" FontSize="11" MaxHeight="32" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" TextAlignment="Center" ToolTip="{Binding ResultQrText}"/>
+                            <TextBlock Text="{Binding JudgeText}" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding JudgeState}" Value="Pass">
-                                                <Setter Property="Fill" Value="{StaticResource PassBorderBrush}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding JudgeState}" Value="Ng">
-                                                <Setter Property="Fill" Value="{StaticResource NgBorderBrush}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding JudgeState}" Value="Waiting">
-                                                <Setter Property="Fill" Value="{StaticResource MeasuringBorderBrush}"/>
-                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding JudgeState}" Value="Pass"><Setter Property="Foreground" Value="{StaticResource PassTextBrush}"/></DataTrigger>
+                                            <DataTrigger Binding="{Binding JudgeState}" Value="Ng"><Setter Property="Foreground" Value="{StaticResource NgTextBrush}"/></DataTrigger>
+                                            <DataTrigger Binding="{Binding JudgeState}" Value="Waiting"><Setter Property="Foreground" Value="{StaticResource MeasuringTextBrush}"/></DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Path.Style>
-                            </Path>
-                            <Path Data="{StaticResource IconCheck}" Stroke="White" StrokeThickness="3.5" StrokeLineJoin="Round"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="28" Height="28" Stretch="Uniform" Margin="0,2,0,0">
-                                <Path.Style>
-                                    <Style TargetType="Path">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding JudgeState}" Value="Pass">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Path.Style>
-                            </Path>
-                            <Path Data="{StaticResource IconCross}" Stroke="White" StrokeThickness="3.5"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="22" Height="22" Stretch="Uniform" Margin="0,2,0,0">
-                                <Path.Style>
-                                    <Style TargetType="Path">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding JudgeState}" Value="Ng">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Path.Style>
-                            </Path>
-                        </Grid>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,10,0">
-                            <TextBlock Text="PHÂN ĐỊNH" Style="{StaticResource SectionTitle}" HorizontalAlignment="Center"/>
-                            <Viewbox StretchDirection="DownOnly" MaxHeight="64">
-                                <TextBlock Text="{Binding JudgeText}" FontSize="44" FontWeight="Bold">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding JudgeState}" Value="Pass">
-                                                    <Setter Property="Foreground" Value="{StaticResource PassTextBrush}"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding JudgeState}" Value="Ng">
-                                                    <Setter Property="Foreground" Value="{StaticResource NgTextBrush}"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding JudgeState}" Value="Waiting">
-                                                    <Setter Property="Foreground" Value="{StaticResource MeasuringTextBrush}"/>
-                                                    <Setter Property="FontSize" Value="30"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </Viewbox>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- GHI CHÚ -->
-                <Border Grid.Row="5" Style="{StaticResource Card}" Padding="10,0" Height="36" Margin="0,0,0,6">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Path Grid.Column="0" Data="{StaticResource IconNote}" Style="{StaticResource IconStroke}" Width="18" Height="18"/>
-                        <Grid Grid.Column="1" Margin="6,0,0,0">
-                            <TextBox Style="{StaticResource NoteTextBox}" Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="Ghi chú sẽ được lưu cùng kết quả đo"/>
-                            <TextBlock Text="GHI CHÚ" Style="{StaticResource PlaceholderText}" FontWeight="Bold" Foreground="{StaticResource ValueBrush}">
-                                <TextBlock.Visibility>
-                                    <Binding Path="Note" Converter="{x:Static vm:EmptyToVisibleConverter.Instance}"/>
-                                </TextBlock.Visibility>
+                                </TextBlock.Style>
                             </TextBlock>
-                        </Grid>
-                    </Grid>
-                </Border>
-
-                <!-- START / STOP / RESET -->
-                <UniformGrid Grid.Row="6" Columns="3">
-                    <Button Style="{StaticResource StartButton}" Command="{Binding StartCommand}" AutomationProperties.Name="START" Margin="0,0,4,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconPlay}" Style="{StaticResource IconFill}" Fill="White" Width="13" Height="13"/>
-                            <TextBlock Text="START" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <UniformGrid Columns="2">
+                                <StackPanel><TextBlock Text="Lực căng"/><TextBlock Text="{Binding ForceText}" FontSize="18"/><TextBlock Text="{Binding ForceUnit}" FontSize="11"/></StackPanel>
+                                <StackPanel><TextBlock Text="Khoảng cách"/><TextBlock Text="{Binding DistanceText}" FontSize="18"/><TextBlock Text="mm" FontSize="11"/></StackPanel>
+                            </UniformGrid>
                         </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource StopButton}" Command="{Binding StopCommand}" AutomationProperties.Name="STOP" Margin="4,0,4,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconStop}" Style="{StaticResource IconFill}" Fill="White" Width="12" Height="12"/>
-                            <TextBlock Text="STOP" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ResetButton}" Command="{Binding ResetCommand}" AutomationProperties.Name="RESET" Margin="4,0,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconReset}" Style="{StaticResource IconStroke}" Stroke="White" StrokeThickness="2.2" Width="15" Height="15"/>
-                            <TextBlock Text="RESET" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+                <UniformGrid Grid.Row="1" Columns="2" Margin="0,8,0,0">
+                    <Button Content="LƯU DỮ LIỆU" Style="{StaticResource ToolButton}" Command="{Binding SaveCommand}" Margin="0,0,4,0"/>
+                    <Button Content="XUẤT EXCEL" Style="{StaticResource ToolButton}" Command="{Binding ExportCommand}" Margin="4,0,0,0"/>
                 </UniformGrid>
             </Grid>
-
-            <!-- ===== Vùng phải ===== -->
             <Grid Grid.Column="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="1*"/>
-                    <RowDefinition Height="1.05*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Histogram theo nhóm -->
-                <ItemsControl Grid.Row="0" ItemsSource="{Binding HistogramGroups}" Margin="0,0,-8,8">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Rows="1"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:HistogramGroupViewModel}">
-                            <Border Style="{StaticResource Card}" Padding="12,8" Margin="0,0,8,0">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="*" MinHeight="270"/><RowDefinition Height="*" MinHeight="200"/></Grid.RowDefinitions>
+                    <ItemsControl Grid.Row="0" ItemsSource="{Binding HistogramGroups}" Margin="0,0,-8,8">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:HistogramGroupViewModel}">
+                                <Border Style="{StaticResource Card}" Padding="12,8" Margin="0,0,8,0">
                                     <Grid>
-                                        <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" Margin="0,0,70,0"/>
-                                        <Button Content="RESET" Style="{StaticResource SmallButton}" HorizontalAlignment="Right"
-                                                Command="{Binding ResetCommand}" ToolTip="Xóa dữ liệu hiển thị trên histogram này (kết quả đã lưu vẫn giữ nguyên)"/>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/>
+                                        <ctrl:HistogramControl Grid.Row="1" Margin="0,6,0,0"
+                                                               Values="{Binding Values}" Lsl="{Binding Lsl}" Usl="{Binding Usl}" SpecText="{Binding SpecText}"
+                                                               BinCount="{Binding DataContext.HistogramBins, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                     </Grid>
-                                    <ctrl:HistogramControl Grid.Row="1" Margin="0,6,0,0"
-                                                           Values="{Binding Values}" Lsl="{Binding Lsl}" Usl="{Binding Usl}" SpecText="{Binding SpecText}"
-                                                           BinCount="{Binding DataContext.HistogramBins, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Trend chart -->
-                <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,8">
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12,8">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock FontSize="13">
-                            <Run Text="TREND CHART" FontWeight="Bold" Foreground="{StaticResource ValueBrush}"/><Run Text=" (MM)" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                        </TextBlock>
-                        <ctrl:TrendChartControl Grid.Row="1" Margin="0,6,0,0"
-                                                Categories="{Binding TrendCategories}" Series="{Binding TrendLines}"
-                                                Usl="{Binding TrendUsl}" Lsl="{Binding TrendLsl}"/>
+
+                        <StackPanel Grid.Row="0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                                <Path Data="{StaticResource IconTable}" Style="{StaticResource IconStroke}" Width="16" Height="16"/>
+                                <TextBlock Text="KẾT QUẢ GẦN NHẤT" Style="{StaticResource CardTitle}" Margin="8,0,0,0"/>
+                                <TextBlock Text="(xuất ExportResultData – Excel)" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <WrapPanel VerticalAlignment="Center">
+                                <Path Data="{StaticResource IconFilter}" Style="{StaticResource IconStroke}" Stroke="{StaticResource TextMutedBrush}" Width="14" Height="14" Margin="0,0,8,0"/>
+                                <TextBlock Text="Từ ngày" Style="{StaticResource FilterLabel}"/>
+                                <DatePicker x:Name="FromDatePicker" SelectedDate="{Binding FromDate}" Width="118" Height="28" FontSize="12" Margin="0,0,10,0"/>
+                                <TextBlock Text="Đến ngày" Style="{StaticResource FilterLabel}"/>
+                                <DatePicker x:Name="ToDatePicker" SelectedDate="{Binding ToDate}" Width="118" Height="28" FontSize="12" Margin="0,0,10,0"/>
+                                <Button Content="Hôm nay" Style="{StaticResource SmallButton}" Command="{Binding FilterTodayCommand}" Height="28" Margin="0,0,4,0"/>
+                                <Button Content="7 ngày" Style="{StaticResource SmallButton}" Command="{Binding FilterWeekCommand}" Height="28" Margin="0,0,4,0"/>
+                                <Button Content="30 ngày" Style="{StaticResource SmallButton}" Command="{Binding FilterMonthCommand}" Height="28" Margin="0,0,4,0"/>
+                                <Button Content="Tất cả" Style="{StaticResource SmallButton}" Command="{Binding FilterAllCommand}" Height="28"/>
+                            </WrapPanel>
+                        </StackPanel>
+
+                        <DataGrid Grid.Row="1" Style="{StaticResource ResultGrid}" ItemsSource="{Binding RecentRows}" Margin="0,8,0,0"
+                                  EnableRowVirtualization="True" EnableColumnVirtualization="False" RowHeight="28" FontSize="12">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="No" Binding="{Binding No}" Width="55"/>
+                                <DataGridTextColumn Header="Đơn hàng" Binding="{Binding OrderNo}" Width="1.1*"/>
+                                <DataGridTextColumn Header="Line" Binding="{Binding Line}" Width="0.7*"/>
+                                <DataGridTextColumn Header="Chủng loại" Binding="{Binding Model}" Width="0.9*"/>
+                                <DataGridTextColumn Header="Serial" Binding="{Binding Serial}" Width="1.3*"/>
+                                <DataGridTextColumn Header="Quy cách" Binding="{Binding SpecText}" Width="0.8*"/>
+                                <DataGridTextColumn Header="Lực căng" Binding="{Binding Force, StringFormat={}{0:0.00}}" Width="0.8*"/>
+                                <DataGridTextColumn Header="Giá trị (mm)" Binding="{Binding Value, StringFormat={}{0:0.00}}" Width="0.9*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="Kết quả" Width="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="3" Padding="8,2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{StaticResource NgCellBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsOk}" Value="True">
+                                                                <Setter Property="Background" Value="{StaticResource OkCellBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding ResultText}" FontWeight="Bold" FontSize="11.5">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource NgCellTextBrush}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsOk}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{StaticResource OkCellTextBrush}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Ngày kiểm tra" Binding="{Binding InspectedAt, StringFormat={}{0:dd/MM/yyyy HH:mm:ss}}" Width="1.2*"/>
+                                <DataGridTextColumn Header="Người KT" Binding="{Binding Inspector}" Width="0.8*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="2" Text="{Binding FilterSummary}" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,6,0,0"/>
                     </Grid>
                 </Border>
-
-                <!-- Dãy nút chức năng -->
-                <UniformGrid Grid.Row="2" Columns="6" Margin="0,0,-8,0">
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding SaveCommand}" AutomationProperties.Name="LƯU DỮ LIỆU" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconSave}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="LƯU DỮ LIỆU" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding ExportCommand}" AutomationProperties.Name="XUẤT DỮ LIỆU" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconUpload}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="XUẤT DỮ LIỆU" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding OpenSettingsCommand}" AutomationProperties.Name="CÀI ĐẶT" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconGear}" Style="{StaticResource IconFill}" Fill="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="CÀI ĐẶT" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding OpenStatisticsCommand}" AutomationProperties.Name="THỐNG KÊ" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconBars}" Style="{StaticResource IconFill}" Fill="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="THỐNG KÊ" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding OpenReportCommand}" AutomationProperties.Name="BÁO CÁO" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconReport}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="BÁO CÁO" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Command="{Binding LoginCommand}" AutomationProperties.Name="ĐĂNG NHẬP" Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource IconUser}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="18" Height="18"/>
-                            <TextBlock Text="ĐĂNG NHẬP" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                </UniformGrid>
             </Grid>
         </Grid>
 
         <!-- ================= THANH TRẠNG THÁI ================= -->
-        <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14,7" Margin="0,10,0,0">
+        <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14,6" Margin="0,10,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -470,11 +279,35 @@
                     <TextBlock Style="{StaticResource StatusText}">
                         <Run Text="PLC:" FontWeight="SemiBold"/><Run Text="   "/><Run Text="{Binding PlcStatusText, Mode=OneWay}" FontWeight="Bold"/>
                     </TextBlock>
+                    <Button Style="{StaticResource StatusButton}" Command="{Binding ConnectCommand}" AutomationProperties.Name="KẾT NỐI PLC"
+                            ToolTip="Kết nối / ngắt kết nối PLC (phần mềm đọc dữ liệu liên tục khi đã kết nối)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource IconPlug}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="12" Height="12"/>
+                            <TextBlock Text="{Binding ConnectButtonText}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
                     <Rectangle Style="{StaticResource StatusSeparator}"/>
                     <Path Data="{StaticResource IconScale}" Style="{StaticResource IconStroke}" Stroke="{StaticResource ValueBrush}" Width="18" Height="18"/>
                     <TextBlock Style="{StaticResource StatusText}">
                         <Run Text="LOADCELL:" FontWeight="SemiBold"/><Run Text="   "/><Run Text="{Binding LoadcellStatusText, Mode=OneWay}" FontWeight="Bold"/>
+                    </TextBlock>
+
+                    <Rectangle Style="{StaticResource StatusSeparator}"/>
+                    <Ellipse Width="12" Height="12" VerticalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource NeutralIconBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MachineRunning}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource StatusGreenBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Style="{StaticResource StatusText}">
+                        <Run Text="MÁY:" FontWeight="SemiBold"/><Run Text="   "/><Run Text="{Binding MachineStateText, Mode=OneWay}" FontWeight="Bold"/>
                     </TextBlock>
 
                     <Rectangle Style="{StaticResource StatusSeparator}"/>

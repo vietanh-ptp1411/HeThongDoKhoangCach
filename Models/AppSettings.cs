@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace HeThongDoKhoangCach.Models;
 
 /// <summary>Giao thức truyền thông với PLC.</summary>
@@ -35,7 +33,7 @@ public enum WordOrder
     HighLow,
 }
 
-/// <summary>Định nghĩa một tag: địa chỉ + cách giải mã. Địa chỉ để trống = PLC không cung cấp dữ liệu này.</summary>
+/// <summary>Định nghĩa một tag: địa chỉ + cách giải mã. Địa chỉ để trống = không dùng tag này.</summary>
 public class TagDefinition
 {
     public string Address { get; set; } = "";
@@ -61,8 +59,10 @@ public class TagDefinition
 }
 
 /// <summary>
-/// Bảng địa chỉ PLC. PLC là nơi xử lý toàn bộ (đo, giữ serial, thông tin đơn hàng, quy cách, phân định, đếm);
-/// phần mềm chỉ đọc lên hiển thị và ghi 3 bit lệnh START/STOP/RESET.
+/// Bảng địa chỉ PLC theo luồng vận hành mới:
+/// phần mềm ghi bit START (M0) / STOP (M15) / RESET và bit chủng loại (M40..M50) khi chọn model;
+/// PLC gửi liên tục lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm qua thanh ghi D / bit M
+/// và phần mềm đọc theo chu kỳ để hiển thị đồng thời.
 /// </summary>
 public class PlcSettings
 {
@@ -71,44 +71,41 @@ public class PlcSettings
     public int Port { get; set; } = 5000;
     /// <summary>Unit ID (chỉ dùng cho Modbus).</summary>
     public byte UnitId { get; set; } = 1;
-    public int PollIntervalMs { get; set; } = 250;
+    public int PollIntervalMs { get; set; } = 200;
     public int TimeoutMs { get; set; } = 2000;
 
-    // ----- Giá trị đo -----
+    // ----- Giá trị PLC gửi liên tục -----
     public TagDefinition LoadcellValue { get; set; } = new() { Address = "D100", DataType = TagDataType.Float32 };
     public TagDefinition DistanceValue { get; set; } = new() { Address = "D102", DataType = TagDataType.Float32 };
-    /// <summary>Kết quả đo chốt của chu kỳ (ô KẾT QUẢ). Trống → lấy khoảng cách tại thời điểm Đo xong.</summary>
+    /// <summary>Kết quả đo chốt của lần đo gần nhất (ô KẾT QUẢ ĐO). Trống → lấy khoảng cách tại lúc Đo xong.</summary>
     public TagDefinition ResultValue { get; set; } = new() { Address = "D104", DataType = TagDataType.Float32 };
-
-    // ----- Quy cách từ PLC (trống → tra theo chủng loại trong cài đặt) -----
-    public TagDefinition SpecLsl { get; set; } = new() { Address = "D106", DataType = TagDataType.Float32 };
-    public TagDefinition SpecUsl { get; set; } = new() { Address = "D108", DataType = TagDataType.Float32 };
 
     // ----- Bộ đếm từ PLC (trống → phần mềm tự đếm theo lịch sử đã lưu) -----
     public TagDefinition TotalCount { get; set; } = new() { Address = "D110", DataType = TagDataType.Int32 };
     public TagDefinition OkCount { get; set; } = new() { Address = "D112", DataType = TagDataType.Int32 };
     public TagDefinition NgCount { get; set; } = new() { Address = "D114", DataType = TagDataType.Int32 };
 
-    // ----- Chuỗi thông tin đơn hàng (trống → serial nhập tại phần mềm, tra file master) -----
-    public TagDefinition SerialText { get; set; } = new() { Address = "D200", DataType = TagDataType.String, Length = 10 };
-    public TagDefinition OrderNoText { get; set; } = new() { Address = "D210", DataType = TagDataType.String, Length = 10 };
-    public TagDefinition LineText { get; set; } = new() { Address = "D220", DataType = TagDataType.String, Length = 5 };
-    public TagDefinition ModelText { get; set; } = new() { Address = "D225", DataType = TagDataType.String, Length = 10 };
-
     // ----- Bit trạng thái -----
     public TagDefinition LoadcellStable { get; set; } = new() { Address = "M100", DataType = TagDataType.Bit };
-    /// <summary>Sườn lên = PLC vừa có một kết quả đo mới (phần mềm ghi vào lịch sử).</summary>
+    /// <summary>
+    /// Sườn lên = PLC vừa có một kết quả đo mới (phần mềm ghi vào lịch sử).
+    /// Trống → phần mềm nhận biết kết quả mới khi bộ đếm TOTAL tăng, hoặc khi giá trị Kết quả đo thay đổi.
+    /// </summary>
     public TagDefinition MeasureDone { get; set; } = new() { Address = "M101", DataType = TagDataType.Bit };
-    /// <summary>Kết quả phân định của PLC. Trống cả hai → phần mềm tự so với quy cách.</summary>
+    /// <summary>Kết quả phân định của PLC. Trống cả hai → phần mềm tự so với quy cách của chủng loại.</summary>
     public TagDefinition JudgeOk { get; set; } = new() { Address = "M102", DataType = TagDataType.Bit };
     public TagDefinition JudgeNg { get; set; } = new() { Address = "M103", DataType = TagDataType.Bit };
     /// <summary>PLC đang ở trạng thái chạy. Trống → theo nút START/STOP trên phần mềm.</summary>
     public TagDefinition RunningState { get; set; } = new() { Address = "M104", DataType = TagDataType.Bit };
 
-    // ----- Bit lệnh phần mềm ghi xuống -----
-    public TagDefinition StartCommand { get; set; } = new() { Address = "M110", DataType = TagDataType.Bit };
-    public TagDefinition StopCommand { get; set; } = new() { Address = "M111", DataType = TagDataType.Bit };
-    public TagDefinition ResetCommand { get; set; } = new() { Address = "M112", DataType = TagDataType.Bit };
+    // ----- Bit lệnh phần mềm ghi xuống (theo yêu cầu khách: Start M0, Stop M15) -----
+    public TagDefinition StartCommand { get; set; } = new() { Address = "M0", DataType = TagDataType.Bit };
+    public TagDefinition StopCommand { get; set; } = new() { Address = "M15", DataType = TagDataType.Bit };
+    public TagDefinition ResetCommand { get; set; } = new() { Address = "M16", DataType = TagDataType.Bit };
+
+    // ----- Quy cách ghi xuống PLC khi chọn model (tùy chọn, nếu PLC muốn nhận LSL/USL từ phần mềm) -----
+    public TagDefinition SpecLslWrite { get; set; } = new() { Address = "", DataType = TagDataType.Float32 };
+    public TagDefinition SpecUslWrite { get; set; } = new() { Address = "", DataType = TagDataType.Float32 };
 
     public void ApplyMcDefaults()
     {
@@ -116,23 +113,19 @@ public class PlcSettings
         LoadcellValue = new() { Address = "D100", DataType = TagDataType.Float32 };
         DistanceValue = new() { Address = "D102", DataType = TagDataType.Float32 };
         ResultValue = new() { Address = "D104", DataType = TagDataType.Float32 };
-        SpecLsl = new() { Address = "D106", DataType = TagDataType.Float32 };
-        SpecUsl = new() { Address = "D108", DataType = TagDataType.Float32 };
         TotalCount = new() { Address = "D110", DataType = TagDataType.Int32 };
         OkCount = new() { Address = "D112", DataType = TagDataType.Int32 };
         NgCount = new() { Address = "D114", DataType = TagDataType.Int32 };
-        SerialText = new() { Address = "D200", DataType = TagDataType.String, Length = 10 };
-        OrderNoText = new() { Address = "D210", DataType = TagDataType.String, Length = 10 };
-        LineText = new() { Address = "D220", DataType = TagDataType.String, Length = 5 };
-        ModelText = new() { Address = "D225", DataType = TagDataType.String, Length = 10 };
         LoadcellStable = new() { Address = "M100", DataType = TagDataType.Bit };
         MeasureDone = new() { Address = "M101", DataType = TagDataType.Bit };
         JudgeOk = new() { Address = "M102", DataType = TagDataType.Bit };
         JudgeNg = new() { Address = "M103", DataType = TagDataType.Bit };
         RunningState = new() { Address = "M104", DataType = TagDataType.Bit };
-        StartCommand = new() { Address = "M110", DataType = TagDataType.Bit };
-        StopCommand = new() { Address = "M111", DataType = TagDataType.Bit };
-        ResetCommand = new() { Address = "M112", DataType = TagDataType.Bit };
+        StartCommand = new() { Address = "M0", DataType = TagDataType.Bit };
+        StopCommand = new() { Address = "M15", DataType = TagDataType.Bit };
+        ResetCommand = new() { Address = "M16", DataType = TagDataType.Bit };
+        SpecLslWrite = new() { Address = "", DataType = TagDataType.Float32 };
+        SpecUslWrite = new() { Address = "", DataType = TagDataType.Float32 };
     }
 
     public void ApplyModbusDefaults()
@@ -141,73 +134,52 @@ public class PlcSettings
         LoadcellValue = new() { Address = "HR100", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
         DistanceValue = new() { Address = "HR102", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
         ResultValue = new() { Address = "HR104", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
-        SpecLsl = new() { Address = "HR106", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
-        SpecUsl = new() { Address = "HR108", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
         TotalCount = new() { Address = "HR110", DataType = TagDataType.Int32, WordOrder = WordOrder.HighLow };
         OkCount = new() { Address = "HR112", DataType = TagDataType.Int32, WordOrder = WordOrder.HighLow };
         NgCount = new() { Address = "HR114", DataType = TagDataType.Int32, WordOrder = WordOrder.HighLow };
-        SerialText = new() { Address = "HR200", DataType = TagDataType.String, Length = 10, WordOrder = WordOrder.HighLow };
-        OrderNoText = new() { Address = "HR210", DataType = TagDataType.String, Length = 10, WordOrder = WordOrder.HighLow };
-        LineText = new() { Address = "HR220", DataType = TagDataType.String, Length = 5, WordOrder = WordOrder.HighLow };
-        ModelText = new() { Address = "HR225", DataType = TagDataType.String, Length = 10, WordOrder = WordOrder.HighLow };
         LoadcellStable = new() { Address = "C100", DataType = TagDataType.Bit };
         MeasureDone = new() { Address = "C101", DataType = TagDataType.Bit };
         JudgeOk = new() { Address = "C102", DataType = TagDataType.Bit };
         JudgeNg = new() { Address = "C103", DataType = TagDataType.Bit };
         RunningState = new() { Address = "C104", DataType = TagDataType.Bit };
-        StartCommand = new() { Address = "C110", DataType = TagDataType.Bit };
-        StopCommand = new() { Address = "C111", DataType = TagDataType.Bit };
-        ResetCommand = new() { Address = "C112", DataType = TagDataType.Bit };
+        StartCommand = new() { Address = "C0", DataType = TagDataType.Bit };
+        StopCommand = new() { Address = "C15", DataType = TagDataType.Bit };
+        ResetCommand = new() { Address = "C16", DataType = TagDataType.Bit };
+        SpecLslWrite = new() { Address = "", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
+        SpecUslWrite = new() { Address = "", DataType = TagDataType.Float32, WordOrder = WordOrder.HighLow };
     }
-}
-
-/// <summary>Quy cách (giới hạn dưới/trên) theo chủng loại – dùng khi PLC không gửi LSL/USL.</summary>
-public class ModelSpec
-{
-    public string Model { get; set; } = "";
-    /// <summary>Nhóm dùng để gộp dữ liệu vẽ histogram (vd: "CPX - GSM").</summary>
-    public string Group { get; set; } = "";
-    public double Lsl { get; set; }
-    public double Usl { get; set; }
-    public string Unit { get; set; } = "mm";
-
-    public string SpecText => string.Create(CultureInfo.InvariantCulture, $"{Lsl:0.#} ~ {Usl:0.#} {Unit}");
-
-    public ModelSpec Clone() => (ModelSpec)MemberwiseClone();
 }
 
 public class AppSettings
 {
-    public const string LegacyDefaultTitle = "HỆ THỐNG ĐO LỰC CĂNG BELT – PLC & LOADCELL";
+    /// <summary>Tiêu đề mặc định của bản trước (đổi sang tiêu đề theo mock mới khi nạp cài đặt cũ).</summary>
+    public const string LegacyDefaultTitle = "HỆ THỐNG ĐO KHOẢNG CÁCH – PLC XYZ & LOADCELL";
 
-    public string Title { get; set; } = "HỆ THỐNG ĐO KHOẢNG CÁCH – PLC XYZ & LOADCELL";
+    public string Title { get; set; } = "HỆ THỐNG ĐO LỰC CĂNG BELT – PLC & LOADCELL";
     public string CompanyLabel { get; set; } = "MVA Lab";
     public string Inspector { get; set; } = "23474";
     public string ForceUnit { get; set; } = "gf";
 
     public PlcSettings Plc { get; set; } = new();
-    public List<ModelSpec> ModelSpecs { get; set; } = DefaultModelSpecs();
 
-    /// <summary>File master của BISG: Key(serial hoặc tiền tố serial),OrderNo,Line,Model – chỉ dùng khi PLC không gửi thông tin đơn hàng.</summary>
+    /// <summary>Tự kết nối PLC ngay khi mở phần mềm (vẫn có nút KẾT NỐI PLC để nối/ngắt thủ công).</summary>
+    public bool AutoConnectPlc { get; set; } = true;
+
+    /// <summary>Database SQLite chứa bảng quy cách – model (chọn ở Bước 1, Bước 2 trên màn hình chính).</summary>
+    public string DatabaseFilePath { get; set; } = @"Data\HeThongDo.db";
+    /// <summary>File master của BISG: Key(serial hoặc tiền tố serial),OrderNo,Line,Model – tra đơn hàng/line theo serial vừa scan.</summary>
     public string MasterFilePath { get; set; } = @"Data\master.csv";
     /// <summary>File lưu lịch sử kết quả (JSON Lines, mỗi dòng một kết quả).</summary>
     public string ResultFilePath { get; set; } = @"Data\results.jsonl";
 
-    /// <summary>Tự ghi vào lịch sử khi PLC báo đo xong và đã có kết quả OK/NG.</summary>
+    /// <summary>Mẫu nội dung mã QR của kết quả đo, vd "{Value}" hoặc "{Serial};{Model};{Value};{Result}".</summary>
+    public string ResultQrTemplate { get; set; } = "{Value}";
+
+    /// <summary>Tự ghi vào lịch sử ngay khi PLC gửi kết quả mới và đã có OK/NG.</summary>
     public bool AutoSaveOnMeasureDone { get; set; } = true;
     public int HistogramBins { get; set; } = 24;
-    /// <summary>Số ngày (có dữ liệu) gần nhất hiển thị trên TREND CHART.</summary>
-    public int TrendDays { get; set; } = 10;
 
-    /// <summary>Thời điểm nhấn RESET trên từng histogram: chỉ vẽ kết quả đo sau thời điểm này.</summary>
-    public Dictionary<string, DateTime> HistogramResetTimes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-
-    public static List<ModelSpec> DefaultModelSpecs() =>
-    [
-        new() { Model = "CPX",     Group = "CPX - GSM",           Lsl = 3.0, Usl = 4.0 },
-        new() { Model = "GSM RUP", Group = "CPX - GSM",           Lsl = 3.0, Usl = 4.0 },
-        new() { Model = "NF 8.3",  Group = "NF - M1 - M2 - PP1",  Lsl = 3.0, Usl = 5.0 },
-        new() { Model = "M1-M2",   Group = "NF - M1 - M2 - PP1",  Lsl = 3.0, Usl = 5.0 },
-        new() { Model = "PP1",     Group = "NF - M1 - M2 - PP1",  Lsl = 3.0, Usl = 5.0 },
-    ];
+    /// <summary>Quy cách / model đang chọn lần trước (tên hiển thị) – chọn lại sẵn khi mở phần mềm.</summary>
+    public string LastSpec { get; set; } = "";
+    public string LastModel { get; set; } = "";
 }

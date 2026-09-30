@@ -27,5 +27,5 @@ public sealed class MeasurementResult
 
     [JsonIgnore] public string ResultText => IsOk ? "OK" : "NG";
     [JsonIgnore] public string ItemName => "Khoảng cách";
-    [JsonIgnore] public string SpecText => string.Create(CultureInfo.InvariantCulture, $"{Lsl:0.#} ~ {Usl:0.#}");
+    [JsonIgnore] public string SpecText => string.Create(CultureInfo.InvariantCulture, $"{Lsl:0.##} ~ {Usl:0.##} mm");
 }

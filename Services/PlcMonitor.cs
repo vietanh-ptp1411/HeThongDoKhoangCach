@@ -12,17 +12,11 @@ public sealed class PlcSnapshot
     public double Force { get; init; }
     public double Distance { get; init; }
     public double? ResultValue { get; init; }
-    public double? Lsl { get; init; }
-    public double? Usl { get; init; }
     public int? Total { get; init; }
     public int? Ok { get; init; }
     public int? Ng { get; init; }
-    public string? Serial { get; init; }
-    public string? OrderNo { get; init; }
-    public string? Line { get; init; }
-    public string? Model { get; init; }
     public bool LoadcellStable { get; init; }
-    public bool MeasureDone { get; init; }
+    public bool? MeasureDone { get; init; }
     public bool? JudgeOk { get; init; }
     public bool? JudgeNg { get; init; }
     public bool? Running { get; init; }
@@ -30,8 +24,8 @@ public sealed class PlcSnapshot
 }
 
 /// <summary>
-/// Vòng lặp nền: kết nối PLC, đọc các tag theo chu kỳ, tự kết nối lại khi lỗi,
-/// và cung cấp hàm ghi lệnh (START/STOP/RESET). Các sự kiện được phát trên thread nền.
+/// Vòng lặp nền: kết nối PLC, đọc các tag theo chu kỳ (PLC gửi liên tục qua thanh ghi D), tự kết nối lại khi lỗi,
+/// và cung cấp hàm ghi bit lệnh (START/STOP/RESET), bit chủng loại và quy cách. Các sự kiện được phát trên thread nền.
 /// </summary>
 public sealed class PlcMonitor : IAsyncDisposable
 {
@@ -49,11 +43,14 @@ public sealed class PlcMonitor : IAsyncDisposable
 
     public bool IsConnected => _connected;
 
-    public async Task StartAsync(PlcSettings settings)
+    /// <summary>Đang chạy vòng đọc (đã bấm KẾT NỐI PLC), dù có thể tạm thời mất kết nối và đang thử lại.</summary>
+    public bool IsActive => _cts is not null;
+
+    public async Task StartAsync(PlcSettings settings, IReadOnlyList<SpecDefinition> specs)
     {
         await StopAsync();
         _settings = settings;
-        _client = PlcClientFactory.Create(settings);
+        _client = PlcClientFactory.Create(settings, specs);
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         _loop = Task.Run(() => RunAsync(token), token);
@@ -88,9 +85,7 @@ public sealed class PlcMonitor : IAsyncDisposable
     /// <summary>Ghi lệnh (bit hoặc word 1/0) tới PLC.</summary>
     public async Task WriteCommandAsync(TagDefinition tag, bool value, CancellationToken ct = default)
     {
-        var client = _client;
-        if (client is null || !client.IsConnected)
-            throw new PlcException("PLC chưa kết nối, không gửi được lệnh");
+        var client = RequireClient();
         if (!tag.IsConfigured)
             throw new PlcException("Địa chỉ lệnh chưa được cấu hình");
 
@@ -98,6 +93,38 @@ public sealed class PlcMonitor : IAsyncDisposable
             await client.WriteBitAsync(tag.Address, value, ct);
         else
             await client.WriteWordsAsync(tag.Address, TagCodec.Encode(tag, value ? 1 : 0), ct);
+    }
+
+    /// <summary>Ghi một bit theo địa chỉ (bit chủng loại M40..M50).</summary>
+    public Task WriteBitAsync(string address, bool value, CancellationToken ct = default)
+    {
+        var client = RequireClient();
+        if (string.IsNullOrWhiteSpace(address))
+            throw new PlcException("Địa chỉ bit đang để trống");
+        return client.WriteBitAsync(address.Trim(), value, ct);
+    }
+
+    /// <summary>Ghi một giá trị số theo định nghĩa tag (quy cách LSL/USL xuống PLC).</summary>
+    public async Task WriteNumberAsync(TagDefinition tag, double value, CancellationToken ct = default)
+    {
+        var client = RequireClient();
+        if (!tag.IsConfigured) return;
+        if (tag.DataType == TagDataType.Bit)
+        {
+            await client.WriteBitAsync(tag.Address, value != 0, ct);
+            return;
+        }
+        if (tag.DataType == TagDataType.String)
+            throw new PlcException($"Tag {tag.Address} là chuỗi, không ghi giá trị số được");
+        await client.WriteWordsAsync(tag.Address, TagCodec.Encode(tag, value), ct);
+    }
+
+    private IPlcClient RequireClient()
+    {
+        var client = _client;
+        if (client is null || !client.IsConnected)
+            throw new PlcException("PLC chưa kết nối, không gửi được lệnh");
+        return client;
     }
 
     private async Task RunAsync(CancellationToken ct)
@@ -135,22 +162,20 @@ public sealed class PlcMonitor : IAsyncDisposable
     private async Task<PlcSnapshot> ReadSnapshotAsync(IPlcClient client, CancellationToken ct)
     {
         var s = _settings;
+        // Đọc tín hiệu hoàn tất trước dữ liệu: nếu PLC chốt giữa chu kỳ poll,
+        // chu kỳ kế tiếp sẽ nhận sườn lên cùng với giá trị đã được chốt.
+        var done = await ReadFlagAsync(client, s.MeasureDone, ct);
+        var total = ToInt(await ReadNumberAsync(client, s.TotalCount, ct));
         return new PlcSnapshot
         {
             Force = await ReadNumberAsync(client, s.LoadcellValue, ct) ?? 0,
             Distance = await ReadNumberAsync(client, s.DistanceValue, ct) ?? 0,
             ResultValue = await ReadNumberAsync(client, s.ResultValue, ct),
-            Lsl = await ReadNumberAsync(client, s.SpecLsl, ct),
-            Usl = await ReadNumberAsync(client, s.SpecUsl, ct),
-            Total = ToInt(await ReadNumberAsync(client, s.TotalCount, ct)),
+            Total = total,
             Ok = ToInt(await ReadNumberAsync(client, s.OkCount, ct)),
             Ng = ToInt(await ReadNumberAsync(client, s.NgCount, ct)),
-            Serial = await ReadStringAsync(client, s.SerialText, ct),
-            OrderNo = await ReadStringAsync(client, s.OrderNoText, ct),
-            Line = await ReadStringAsync(client, s.LineText, ct),
-            Model = await ReadStringAsync(client, s.ModelText, ct),
             LoadcellStable = await ReadFlagAsync(client, s.LoadcellStable, ct) ?? true,
-            MeasureDone = await ReadFlagAsync(client, s.MeasureDone, ct) ?? false,
+            MeasureDone = done,
             JudgeOk = await ReadFlagAsync(client, s.JudgeOk, ct),
             JudgeNg = await ReadFlagAsync(client, s.JudgeNg, ct),
             Running = await ReadFlagAsync(client, s.RunningState, ct),
@@ -172,19 +197,6 @@ public sealed class PlcMonitor : IAsyncDisposable
             throw new PlcException($"Tag {tag.Address} được cấu hình là chuỗi nhưng đang dùng cho giá trị số");
         var words = await client.ReadWordsAsync(tag.Address, tag.WordCount, ct);
         return TagCodec.Decode(tag, words);
-    }
-
-    private static async Task<string?> ReadStringAsync(IPlcClient client, TagDefinition tag, CancellationToken ct)
-    {
-        if (!tag.IsConfigured) return null;
-        if (tag.DataType != TagDataType.String)
-        {
-            // Cho phép cấu hình số cho các ô chuỗi (vd mã line dạng số)
-            var n = await ReadNumberAsync(client, tag, ct);
-            return n is { } d ? d.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "";
-        }
-        var words = await client.ReadWordsAsync(tag.Address, tag.WordCount, ct);
-        return TagCodec.DecodeString(tag, words);
     }
 
     private static async Task<bool?> ReadFlagAsync(IPlcClient client, TagDefinition tag, CancellationToken ct)

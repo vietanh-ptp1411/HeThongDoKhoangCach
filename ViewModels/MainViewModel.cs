@@ -8,18 +8,13 @@ using HeThongDoKhoangCach.Services;
 
 namespace HeThongDoKhoangCach.ViewModels;
 
-/// <summary>Một khối HISTOGRAM trên màn hình chính (một nhóm chủng loại có cùng quy cách).</summary>
+/// <summary>Một khối histogram trên màn hình chính (một nhóm chủng loại có cùng quy cách).</summary>
 public sealed class HistogramGroupViewModel : ViewModelBase
 {
-    public HistogramGroupViewModel(string group, Action<string> reset)
-    {
-        Group = group;
-        ResetCommand = new RelayCommand(() => reset(group));
-    }
+    public HistogramGroupViewModel(string group) => Group = group;
 
     public string Group { get; }
-    public string Title => "HISTOGRAM : " + Group;
-    public ICommand ResetCommand { get; }
+    public string Title => "QUY CÁCH: " + Group;
 
     private IReadOnlyList<double> _values = [];
     public IReadOnlyList<double> Values { get => _values; set => SetProperty(ref _values, value); }
@@ -34,17 +29,10 @@ public sealed class HistogramGroupViewModel : ViewModelBase
     public string SpecText { get => _specText; set => SetProperty(ref _specText, value); }
 }
 
-/// <summary>
-/// Màn hình hiển thị (HMI) cho PLC: PLC làm toàn bộ việc đo, giữ serial/đơn hàng, quy cách, phân định OK/NG, đếm.
-/// Phần mềm đọc các tag lên hiển thị, ghi 3 bit lệnh START/STOP/RESET, và lưu lịch sử mỗi khi bit Đo xong
-/// có sườn lên để vẽ histogram, trend chart, báo cáo, Excel.
-/// Tag nào PLC không cung cấp (địa chỉ trống) thì phần mềm tự bù: serial nhập tại máy tính, tra file master,
-/// quy cách theo chủng loại trong cài đặt, tự so quy cách để ra OK/NG, tự đếm theo lịch sử.
-/// </summary>
+/// <summary>Chọn quy cách → model → scan serial → START → chốt kết quả và QR.</summary>
 public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 {
-    public const string AppVersion = "1.0.0";
-    private const string AllGroupName = "TẤT CẢ";
+    public const string AppVersion = "1.2.0";
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -56,15 +44,97 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private MasterDataService _master;
     private ResultStore _store;
 
+    // ----- phát hiện kết quả mới từ PLC -----
+    private bool _hasSnapshot;
     private bool _lastMeasureDone;
-    /// <summary>Đã có sườn lên Đo xong nhưng chưa ghi được lịch sử (chờ OK/NG từ PLC hoặc chờ serial).</summary>
-    private bool _awaitingRecord;
-    private bool _currentSaved;
-    /// <summary>Chỉ dùng khi serial nhập tại phần mềm: serial đã gắn với một kết quả đã lưu.</summary>
-    private bool _serialConsumed;
-    private string _plcSerialLast = "";
-    private double _capturedForce;
-    private ModelSpec? _currentSpec;
+    private int _lastTotal;
+    private double _lastResultValue;
+    /// <summary>Đã có kết quả mới nhưng chưa ghi được lịch sử (chờ OK/NG từ PLC hoặc chưa có quy cách).</summary>
+    private bool _pendingRecord;
+    private SpecDefinition? _currentSpec;
+    private ModelDefinition? _selectedModel;
+    private bool _measurementActive, _serialReady, _starting;
+    private readonly Queue<MeasurementResult> _unsavedResults = new();
+    private MeasurementResult? _completedResult;
+    private MeasurementResult? _cycleResult;
+    private readonly SemaphoreSlim _modelWriteGate = new(1, 1);
+    private readonly SemaphoreSlim _commandGate = new(1, 1);
+    public ObservableCollection<SpecDefinition> Specs { get; } = [];
+    public IReadOnlyList<ModelDefinition> AvailableModels => SelectedSpec?.Models.ToList() ?? [];
+    public bool CanEditSelection => !_measurementActive && !_starting && !MachineRunning && !_pendingRecord && _unsavedResults.Count == 0;
+    public SpecDefinition? SelectedSpec
+    {
+        get => _currentSpec;
+        set
+        {
+            if (!CanEditSelection || ReferenceEquals(_currentSpec, value)) return;
+            _currentSpec = value;
+            _selectedModel = null;
+            Model = "";
+            SpecText = value?.Name ?? "--";
+            InvalidateSerial();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(AvailableModels));
+            OnPropertyChanged(nameof(SelectedModel));
+            OnPropertyChanged(nameof(ConditionText));
+            RememberSelection();
+            _ = SendModelToPlcSafeAsync();
+        }
+    }
+    public ModelDefinition? SelectedModel
+    {
+        get => _selectedModel;
+        set
+        {
+            if (!CanEditSelection || ReferenceEquals(_selectedModel, value)) return;
+            if (value is not null && SelectedSpec?.Models.Contains(value) != true) return;
+            _selectedModel = value;
+            Model = value?.Name ?? "";
+            InvalidateSerial();
+            OnPropertyChanged();
+            RememberSelection();
+            _ = SendModelToPlcSafeAsync();
+        }
+    }
+    public string ConditionText => SelectedSpec?.Condition ?? "";
+    private string _resultQrText = "";
+    public string ResultQrText { get => _resultQrText; private set => SetProperty(ref _resultQrText, value); }
+    private void RememberSelection()
+    {
+        _settings.LastSpec = SelectedSpec?.Name ?? "";
+        _settings.LastModel = Model;
+        TrySaveSettings();
+        RaiseJudgeChanged();
+    }
+    private void InvalidateSerial()
+    {
+        _serialReady = false;
+        Serial = OrderNo = Line = QrInput = "";
+        ClearCurrentMeasurement();
+    }
+    private void LoadCatalog()
+    {
+        var database = new SpecDatabase(SettingsService.ResolvePath(_settings.DatabaseFilePath));
+        bool firstUse = !File.Exists(database.FilePath);
+        var specs = database.Load();
+        if (firstUse && P.Protocol == PlcProtocol.ModbusTcp)
+        {
+            foreach (var model in specs.SelectMany(s => s.Models))
+                if (model.PlcBit.StartsWith('M')) model.PlcBit = "C" + model.PlcBit[1..];
+            database.Save(specs);
+        }
+        Specs.Clear();
+        foreach (var spec in specs) Specs.Add(spec);
+        _currentSpec = Specs.FirstOrDefault(s => s.Name == _settings.LastSpec);
+        _selectedModel = _currentSpec?.Models.FirstOrDefault(m => m.Name == _settings.LastModel);
+        Model = _selectedModel?.Name ?? "";
+        SpecText = _currentSpec?.Name ?? "--";
+        OnPropertyChanged(nameof(SelectedSpec));
+        OnPropertyChanged(nameof(SelectedModel));
+        OnPropertyChanged(nameof(AvailableModels));
+        OnPropertyChanged(nameof(ConditionText));
+    }
+    private bool _plcActive;
     private int _total, _okCount, _ngCount;
 
     public MainViewModel(AppSettings settings)
@@ -73,6 +143,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _master = new MasterDataService(SettingsService.ResolvePath(settings.MasterFilePath));
         _store = new ResultStore(SettingsService.ResolvePath(settings.ResultFilePath));
         TryLoadStore();
+        LoadCatalog();
 
         _monitor.SnapshotReceived += s => _dispatcher.InvokeAsync(() => OnSnapshot(s));
         _monitor.ConnectionChanged += c => _dispatcher.InvokeAsync(() => OnConnectionChanged(c));
@@ -81,32 +152,32 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _clock = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Now = DateTime.Now, _dispatcher);
         _clock.Stop();
 
-        LookupSerialCommand = new RelayCommand(LookupSerialFromInput);
-        StartCommand = new AsyncRelayCommand(StartRunAsync, () => !IsRunning && PlcOnline, ReportError);
-        StopCommand = new AsyncRelayCommand(StopRunAsync, () => IsRunning, ReportError);
+        ScanCommand = new AsyncRelayCommand(ScanAsync, () => CanEditSelection && SelectedModel is not null, ReportError);
+        ConnectCommand = new AsyncRelayCommand(ToggleConnectAsync, null, ReportError);
+        StartCommand = new AsyncRelayCommand(StartMachineAsync, () => PlcOnline && _hasSnapshot && CanEditSelection && SelectedModel is not null && (_serialReady || !string.IsNullOrWhiteSpace(QrInput)), ReportError);
+        StopCommand = new AsyncRelayCommand(StopMachineAsync, () => PlcOnline, ReportError);
         ResetCommand = new AsyncRelayCommand(ResetAsync, null, ReportError);
-        SaveCommand = new RelayCommand(SaveCurrent, () => MeasuredValue.HasValue && IsPass.HasValue && !_currentSaved);
-        ExportCommand = new AsyncRelayCommand(ExportAsync, () => _store.All.Count > 0, ReportError);
-        OpenSettingsCommand = new AsyncRelayCommand(OpenSettingsAsync, null, ReportError);
+        SaveCommand = new RelayCommand(SaveCurrent, () => _unsavedResults.Count > 0);
+        ExportCommand = new AsyncRelayCommand(ExportAsync, () => RecentRows.Count > 0, ReportError);
+        OpenSettingsCommand = new AsyncRelayCommand(OpenSettingsAsync, () => CanEditSelection, ReportError);
         OpenReportCommand = new RelayCommand(() => ShowReportDialog?.Invoke(_store.All));
-        OpenStatisticsCommand = new RelayCommand(() => ShowStatisticsDialog?.Invoke(_store.All, _settings.ModelSpecs));
+        OpenStatisticsCommand = new RelayCommand(() => ShowStatisticsDialog?.Invoke(_store.All, Specs.ToList()));
         LoginCommand = new RelayCommand(Login);
+        FilterTodayCommand = new RelayCommand(() => SetDateRange(DateTime.Today, DateTime.Today));
+        FilterWeekCommand = new RelayCommand(() => SetDateRange(DateTime.Today.AddDays(-6), DateTime.Today));
+        FilterMonthCommand = new RelayCommand(() => SetDateRange(DateTime.Today.AddDays(-29), DateTime.Today));
+        FilterAllCommand = new RelayCommand(() => SetDateRange(null, null));
 
         RebuildHistogramGroups();
-        RefreshTrend();
-        RefreshStatistics();
+        RefreshView();
     }
 
     // ----- Nguồn dữ liệu: PLC cung cấp hay phần mềm tự bù -----
 
     private PlcSettings P => _settings.Plc;
-    public bool SerialFromPlc => P.SerialText.IsConfigured;
-    private bool OrderFromPlc => P.OrderNoText.IsConfigured || P.LineText.IsConfigured || P.ModelText.IsConfigured;
-    private bool SpecFromPlc => P.SpecLsl.IsConfigured && P.SpecUsl.IsConfigured;
     private bool JudgeFromPlc => P.JudgeOk.IsConfigured || P.JudgeNg.IsConfigured;
     private bool CountersFromPlc => P.TotalCount.IsConfigured;
     private bool RunningFromPlc => P.RunningState.IsConfigured;
-    public string SerialPlaceholder => SerialFromPlc ? "Serial do PLC cung cấp" : "Scan / nhập số serial rồi nhấn Enter";
 
     // ----- Móc nối với View (hộp thoại) -----
 
@@ -114,12 +185,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public Func<string, string?>? ChooseExportPath { get; set; }
     public Action<string, bool>? ShowMessage { get; set; }
     public Action<IReadOnlyList<MeasurementResult>>? ShowReportDialog { get; set; }
-    public Action<IReadOnlyList<MeasurementResult>, IReadOnlyList<ModelSpec>>? ShowStatisticsDialog { get; set; }
+    public Action<IReadOnlyList<MeasurementResult>, IReadOnlyList<SpecDefinition>>? ShowStatisticsDialog { get; set; }
     public Func<string, string?>? ShowLoginDialog { get; set; }
 
     // ----- Lệnh -----
 
-    public ICommand LookupSerialCommand { get; }
+    public ICommand ScanCommand { get; }
+    public ICommand ConnectCommand { get; }
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand ResetCommand { get; }
@@ -129,6 +201,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public ICommand OpenReportCommand { get; }
     public ICommand OpenStatisticsCommand { get; }
     public ICommand LoginCommand { get; }
+    public ICommand FilterTodayCommand { get; }
+    public ICommand FilterWeekCommand { get; }
+    public ICommand FilterMonthCommand { get; }
+    public ICommand FilterAllCommand { get; }
 
     // ----- Tiêu đề / đồng hồ / người kiểm tra -----
 
@@ -150,7 +226,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private DateTime _now = DateTime.Now;
     public DateTime Now { get => _now; private set => SetProperty(ref _now, value); }
 
-    // ----- Giá trị thời gian thực -----
+    // ----- Giá trị PLC gửi liên tục -----
 
     private double _force;
     public double Force
@@ -168,74 +244,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     public string DistanceText => Distance.ToString("0.00", Inv);
 
-    private bool _plcOnline;
-    public bool PlcOnline
-    {
-        get => _plcOnline;
-        private set
-        {
-            if (!SetProperty(ref _plcOnline, value)) return;
-            OnPropertyChanged(nameof(PlcStatusText));
-            OnPropertyChanged(nameof(StartHint));
-        }
-    }
-    public string PlcStatusText => PlcOnline ? "ONLINE" : "OFFLINE";
-
-    private bool _loadcellStable;
-    public bool LoadcellStable
-    {
-        get => _loadcellStable;
-        private set { if (SetProperty(ref _loadcellStable, value)) OnPropertyChanged(nameof(LoadcellStatusText)); }
-    }
-    public string LoadcellStatusText => LoadcellStable ? "STABLE" : "UNSTABLE";
-
-    // ----- Trạng thái chạy -----
-
-    private bool _isRunning;
-    /// <summary>Đang chạy: theo bit trạng thái của PLC nếu có, không thì theo nút START/STOP.</summary>
-    public bool IsRunning
-    {
-        get => _isRunning;
-        private set { if (SetProperty(ref _isRunning, value)) RaiseJudgeChanged(); }
-    }
-
-    // ----- Thông tin đơn hàng -----
-
-    private string _serialInput = "";
-    public string SerialInput
-    {
-        get => _serialInput;
-        set { if (SetProperty(ref _serialInput, value)) OnPropertyChanged(nameof(StartHint)); }
-    }
-
-    private string _serial = "";
-    public string Serial
-    {
-        get => _serial;
-        private set
-        {
-            if (!SetProperty(ref _serial, value)) return;
-            if (SerialFromPlc) SerialInput = value;   // ô serial hiển thị đúng chuỗi PLC gửi
-            OnPropertyChanged(nameof(StartHint));
-        }
-    }
-
-    private string _orderNo = "";
-    public string OrderNo { get => _orderNo; private set => SetProperty(ref _orderNo, value); }
-
-    private string _line = "";
-    public string Line { get => _line; private set => SetProperty(ref _line, value); }
-
-    private string _model = "";
-    public string Model { get => _model; private set => SetProperty(ref _model, value); }
-
-    private string _specText = "";
-    public string SpecText { get => _specText; private set => SetProperty(ref _specText, value); }
-
-    private string _note = "";
-    public string Note { get => _note; set => SetProperty(ref _note, value); }
-
     private double? _measuredValue;
+    /// <summary>Kết quả chốt mới nhất của cuộn dây, cập nhật sau mỗi lần PLC báo đo xong.</summary>
     public double? MeasuredValue
     {
         get => _measuredValue;
@@ -246,7 +256,84 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RaiseJudgeChanged();
         }
     }
+    /// <summary>Chưa nhận tín hiệu đo xong → hiển thị "--".</summary>
     public string MeasuredValueText => MeasuredValue is { } v ? v.ToString("0.00", Inv) : "--";
+
+    // ----- Kết nối / trạng thái -----
+
+    private bool _plcOnline;
+    public bool PlcOnline
+    {
+        get => _plcOnline;
+        private set
+        {
+            if (!SetProperty(ref _plcOnline, value)) return;
+            OnPropertyChanged(nameof(PlcStatusText));
+            OnPropertyChanged(nameof(ScanHint));
+        }
+    }
+    public string PlcStatusText => PlcOnline ? "ONLINE" : _plcActive ? "ĐANG KẾT NỐI" : "OFFLINE";
+
+    /// <summary>Đã bấm KẾT NỐI PLC (vòng đọc đang chạy, có thể đang thử kết nối lại).</summary>
+    public bool PlcActive
+    {
+        get => _plcActive;
+        private set
+        {
+            if (!SetProperty(ref _plcActive, value)) return;
+            OnPropertyChanged(nameof(ConnectButtonText));
+            OnPropertyChanged(nameof(PlcStatusText));
+            OnPropertyChanged(nameof(ScanHint));
+        }
+    }
+    public string ConnectButtonText => PlcActive ? "NGẮT KẾT NỐI" : "KẾT NỐI PLC";
+
+    private bool _loadcellStable;
+    public bool LoadcellStable
+    {
+        get => _loadcellStable;
+        private set { if (SetProperty(ref _loadcellStable, value)) OnPropertyChanged(nameof(LoadcellStatusText)); }
+    }
+    public string LoadcellStatusText => LoadcellStable ? "STABLE" : "UNSTABLE";
+
+    private bool _machineRunning;
+    /// <summary>Máy đang chạy: theo bit trạng thái của PLC nếu có, không thì theo nút START/STOP vừa bấm.</summary>
+    public bool MachineRunning
+    {
+        get => _machineRunning;
+        private set
+        {
+            if (!SetProperty(ref _machineRunning, value)) return;
+            OnPropertyChanged(nameof(MachineStateText));
+            RaiseJudgeChanged();
+        }
+    }
+    public string MachineStateText => MachineRunning ? "ĐANG CHẠY" : "DỪNG";
+
+    // ----- Thông tin đơn hàng (từ mã QR) -----
+
+    private string _qrInput = "";
+    public string QrInput { get => _qrInput; set => SetProperty(ref _qrInput, value); }
+    public string QrPlaceholder => "Scan mã vạch serial, kết thúc bằng Enter";
+
+    private string _serial = "";
+    public string Serial { get => _serial; private set { if (SetProperty(ref _serial, value)) OnPropertyChanged(nameof(ScanHint)); } }
+
+    private string _orderNo = "";
+    public string OrderNo { get => _orderNo; private set => SetProperty(ref _orderNo, value); }
+
+    private string _line = "";
+    public string Line { get => _line; private set => SetProperty(ref _line, value); }
+
+    private string _model = "";
+    public string Model { get => _model; private set { if (SetProperty(ref _model, value)) OnPropertyChanged(nameof(ScanHint)); } }
+
+    private string _specText = "--";
+    public string SpecText { get => _specText; private set => SetProperty(ref _specText, value); }
+
+    private string _modelBitText = "";
+    /// <summary>Bit PLC đang bật cho chủng loại hiện tại (hiển thị cạnh chủng loại).</summary>
+    public string ModelBitText { get => _modelBitText; private set => SetProperty(ref _modelBitText, value); }
 
     private bool? _isPass;
     public bool? IsPass
@@ -260,7 +347,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         true => "Pass",
         false => "Ng",
-        null => IsRunning ? "Waiting" : "None",
+        null => _pendingRecord || _measurementActive || _starting || MachineRunning ? "Waiting" : "None",
     };
 
     public string JudgeText
@@ -268,46 +355,34 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get
         {
             if (IsPass is { } ok) return ok ? "PASS" : "NG";
-            if (!IsRunning) return "---";
-            if (!_awaitingRecord) return "ĐANG CHỜ";
-            if (!SerialFromPlc && !HasFreshSerial) return "CHỜ SERIAL";
-            return "CHỜ KẾT QUẢ";
+            if (_pendingRecord) return "CHỜ KẾT QUẢ";
+            return _measurementActive || _starting || MachineRunning ? "ĐANG ĐO" : "---";
         }
     }
 
     private void RaiseJudgeChanged()
     {
+        OnPropertyChanged(nameof(CanEditSelection));
+        CommandManager.InvalidateRequerySuggested();
         OnPropertyChanged(nameof(JudgeState));
         OnPropertyChanged(nameof(JudgeText));
-        OnPropertyChanged(nameof(StartHint));
+        OnPropertyChanged(nameof(ScanHint));
     }
 
-    /// <summary>Dòng hướng dẫn hiển thị dưới khối thông tin đơn hàng.</summary>
-    public string StartHint
+    /// <summary>Dòng hướng dẫn (đỏ) dưới khối thông tin đơn hàng.</summary>
+    public string ScanHint
     {
         get
         {
-            if (!PlcOnline)
-                return "PLC chưa kết nối – kiểm tra CÀI ĐẶT kết nối.";
-            if (!IsRunning)
-                return "Nhấn START để bắt đầu.";
-            if (_awaitingRecord && IsPass is null)
-            {
-                return JudgeFromPlc
-                    ? "PLC báo đo xong – đang chờ PLC trả kết quả OK/NG."
-                    : "Đo xong nhưng chưa có quy cách để phân định – kiểm tra chủng loại trong CÀI ĐẶT.";
-            }
-            if (_awaitingRecord && !SerialFromPlc && !HasFreshSerial)
-                return "Đã nhận kết quả đo – scan serial để phân định và lưu.";
-            if (SerialFromPlc)
-                return string.IsNullOrWhiteSpace(Serial) ? "Đang chạy – chờ PLC gửi serial và kết quả đo." : "";
-            if (string.IsNullOrWhiteSpace(Serial) || _serialConsumed)
-                return "Đang chạy – scan số serial của sản phẩm.";
-            if (!OrderFromPlc && string.IsNullOrWhiteSpace(Model))
-                return "Serial không có trong file master – không phân định được PASS/NG.";
-            if (!JudgeFromPlc && _currentSpec is null)
-                return $"Chủng loại '{Model}' chưa có quy cách trong CÀI ĐẶT – không phân định được PASS/NG.";
-            return "";
+            if (!PlcActive) return "PLC chưa kết nối – nhấn KẾT NỐI PLC ở thanh trạng thái.";
+            if (!PlcOnline) return "Đang kết nối PLC...";
+            if (_unsavedResults.Count > 0) return $"Có {_unsavedResults.Count} kết quả chờ lưu – nhấn LƯU DỮ LIỆU.";
+            if (SelectedSpec is null) return "Bước 1: Chọn quy cách đo.";
+            if (SelectedModel is null) return "Bước 2: Chọn chủng loại thuộc quy cách.";
+            if (_pendingRecord) return "Đang chờ bit OK/NG từ PLC.";
+            if (_measurementActive || _starting || MachineRunning) return "Đang đo liên tục – nhấn STOP khi hết cuộn dây.";
+            if (!_serialReady) return "Bước 3: Scan serial một lần cho cuộn dây cần đo.";
+            return "Nhấn START để đo liên tục với serial này.";
         }
     }
 
@@ -316,27 +391,43 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     // ----- Bộ đếm -----
 
-    public string TotalText => _total.ToString(Inv);
-    public string OkText => _okCount.ToString(Inv);
-    public string NgText => _ngCount.ToString(Inv);
+    public string TotalText => _total.ToString("#,##0", Inv);
+    public string OkText => _okCount.ToString("#,##0", Inv);
+    public string NgText => _ngCount.ToString("#,##0", Inv);
 
-    // ----- Histogram theo nhóm -----
+    // ----- Histogram theo nhóm + bảng kết quả (cùng bộ lọc ngày) -----
 
     public ObservableCollection<HistogramGroupViewModel> HistogramGroups { get; } = [];
 
-    // ----- Trend chart -----
+    private IReadOnlyList<MeasurementResult> _recentRows = [];
+    public IReadOnlyList<MeasurementResult> RecentRows { get => _recentRows; private set => SetProperty(ref _recentRows, value); }
 
-    private IReadOnlyList<DateTime> _trendCategories = [];
-    public IReadOnlyList<DateTime> TrendCategories { get => _trendCategories; private set => SetProperty(ref _trendCategories, value); }
+    private string _filterSummary = "";
+    public string FilterSummary { get => _filterSummary; private set => SetProperty(ref _filterSummary, value); }
 
-    private IReadOnlyList<TrendSeries> _trendLines = [];
-    public IReadOnlyList<TrendSeries> TrendLines { get => _trendLines; private set => SetProperty(ref _trendLines, value); }
+    private DateTime? _fromDate;
+    public DateTime? FromDate
+    {
+        get => _fromDate;
+        set { if (SetProperty(ref _fromDate, value?.Date)) RefreshView(); }
+    }
 
-    private double _trendUsl = double.NaN;
-    public double TrendUsl { get => _trendUsl; private set => SetProperty(ref _trendUsl, value); }
+    private DateTime? _toDate;
+    public DateTime? ToDate
+    {
+        get => _toDate;
+        set { if (SetProperty(ref _toDate, value?.Date)) RefreshView(); }
+    }
 
-    private double _trendLsl = double.NaN;
-    public double TrendLsl { get => _trendLsl; private set => SetProperty(ref _trendLsl, value); }
+    private void SetDateRange(DateTime? from, DateTime? to)
+    {
+        bool changed = _fromDate != from || _toDate != to;
+        _fromDate = from;
+        _toDate = to;
+        OnPropertyChanged(nameof(FromDate));
+        OnPropertyChanged(nameof(ToDate));
+        if (changed) RefreshView();
+    }
 
     // ================= Vòng đời =================
 
@@ -344,10 +435,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         _clock.Start();
         Now = DateTime.Now;
-        await _monitor.StartAsync(_settings.Plc);
-        StatusMessage = _settings.Plc.Protocol == PlcProtocol.Simulation
-            ? "Chế độ mô phỏng – nhấn START, PLC giả sẽ tự scan và đo từng sản phẩm"
-            : $"Đang kết nối {ConnectionText}...";
+        if (_settings.AutoConnectPlc) await ConnectAsync();
+        else StatusMessage = "Nhấn KẾT NỐI PLC để bắt đầu đọc dữ liệu";
     }
 
     public async ValueTask DisposeAsync()
@@ -356,7 +445,30 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await _monitor.StopAsync();
     }
 
-    // ================= Xử lý dữ liệu PLC =================
+    // ================= Kết nối PLC =================
+
+    private Task ToggleConnectAsync() => PlcActive ? DisconnectAsync() : ConnectAsync();
+
+    private async Task ConnectAsync()
+    {
+        PlcActive = true;
+        ResetDetection();
+        await _monitor.StartAsync(_settings.Plc, Specs.ToList());
+        StatusMessage = _settings.Plc.Protocol == PlcProtocol.Simulation
+            ? "Chế độ mô phỏng – chọn quy cách, model, scan serial rồi START"
+            : $"Đang kết nối {ConnectionText}...";
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private async Task DisconnectAsync()
+    {
+        await _monitor.StopAsync();
+        PlcActive = false;
+        PlcOnline = false;
+        LoadcellStable = false;
+        StatusMessage = "Đã ngắt kết nối PLC";
+        CommandManager.InvalidateRequerySuggested();
+    }
 
     private void OnConnectionChanged(bool connected)
     {
@@ -364,81 +476,108 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (connected)
         {
             StatusMessage = "Đã kết nối PLC";
+            ResetDetection();
+            // PLC có thể vừa khởi động lại: gửi lại bit chủng loại đang chọn.
+            _ = SendModelToPlcSafeAsync();
         }
         else
         {
+            _measurementActive = _pendingRecord = false;
+            _cycleResult = null;
+            MachineRunning = false;
+            RaiseJudgeChanged();
             LoadcellStable = false;
-            if (IsRunning && !RunningFromPlc)
-            {
-                IsRunning = false;
-                StatusMessage = "Mất kết nối PLC – nhấn START lại khi kết nối trở lại";
-            }
+            if (PlcActive) StatusMessage = "Mất kết nối PLC – đang thử kết nối lại...";
         }
         CommandManager.InvalidateRequerySuggested();
     }
 
-    /// <summary>Mỗi chu kỳ poll: đổ toàn bộ dữ liệu PLC lên màn hình, bắt sườn lên Đo xong để ghi lịch sử.</summary>
+    private void ResetDetection()
+    {
+        _hasSnapshot = false;
+        _lastMeasureDone = false;
+        _lastTotal = 0;
+        _lastResultValue = 0;
+    }
+
+    // ================= Xử lý dữ liệu PLC =================
+
+    /// <summary>Mỗi chu kỳ poll: đổ toàn bộ dữ liệu PLC lên màn hình, phát hiện kết quả mới để ghi lịch sử.</summary>
     private void OnSnapshot(PlcSnapshot s)
     {
         Force = s.Force;
         Distance = s.Distance;
         LoadcellStable = s.LoadcellStable;
 
-        if (RunningFromPlc) IsRunning = s.Running == true;
+        if (RunningFromPlc) MachineRunning = s.Running == true;
 
-        if (SerialFromPlc)
-        {
-            var plcSerial = s.Serial ?? "";
-            if (!string.Equals(plcSerial, _plcSerialLast, StringComparison.Ordinal))
-            {
-                _plcSerialLast = plcSerial;
-                ApplySerial(plcSerial, fromPlc: true);
-            }
-        }
-
-        if (P.OrderNoText.IsConfigured) OrderNo = s.OrderNo ?? "";
-        if (P.LineText.IsConfigured) Line = s.Line ?? "";
-        if (P.ModelText.IsConfigured)
-        {
-            var model = s.Model ?? "";
-            if (!string.Equals(Model, model, StringComparison.Ordinal))
-            {
-                Model = model;
-                if (!SpecFromPlc) ApplySpec(FindSpec(model));
-            }
-        }
-
-        if (SpecFromPlc && s.Lsl is { } lsl && s.Usl is { } usl)
-            ApplyPlcSpec(lsl, usl);
-
-        if (P.ResultValue.IsConfigured && s.ResultValue is { } rv)
-        {
-            var rounded = Math.Round(rv, 2);
-            if (MeasuredValue != rounded) MeasuredValue = rounded;
-        }
-
-        if (JudgeFromPlc)
-        {
-            bool? judge = s.JudgeOk == true ? true : s.JudgeNg == true ? false : null;
-            if (IsPass != judge) IsPass = judge;
-        }
+        if (_pendingRecord && JudgeFromPlc)
+            IsPass = s.JudgeNg == true ? false : s.JudgeOk == true ? true : null;
 
         if (CountersFromPlc)
             SetCounters(s.Total ?? 0, s.Ok ?? 0, s.Ng ?? 0);
 
-        bool rising = s.MeasureDone && !_lastMeasureDone;
-        _lastMeasureDone = s.MeasureDone;
-
-        if (rising) OnMeasureDone(s);
-        else if (_awaitingRecord) TryRecord();
+        if (DetectNewResult(s) && _measurementActive) OnNewResult(s);
+        else if (_pendingRecord) TryRecord();
+        CommandManager.InvalidateRequerySuggested();
     }
 
-    /// <summary>PLC báo đo xong: chốt giá trị, phân định (nếu PLC không làm) và ghi lịch sử.</summary>
-    private void OnMeasureDone(PlcSnapshot s)
+    /// <summary>
+    /// Kết quả mới = sườn lên bit Đo xong; nếu không cấu hình bit này thì khi bộ đếm TOTAL tăng;
+    /// nếu cũng không có bộ đếm thì khi giá trị Kết quả đo thay đổi. Lần đọc đầu tiên sau khi kết nối không tính.
+    /// </summary>
+    private bool DetectNewResult(PlcSnapshot s)
     {
-        if (!P.ResultValue.IsConfigured) MeasuredValue = Math.Round(s.Distance, 2);
-        _capturedForce = s.Force;
-        _currentSaved = false;
+        bool first = !_hasSnapshot;
+        _hasSnapshot = true;
+
+        if (P.MeasureDone.IsConfigured)
+        {
+            bool done = s.MeasureDone == true;
+            bool rising = done && !_lastMeasureDone && !first;
+            _lastMeasureDone = done;
+            return rising;
+        }
+        if (P.TotalCount.IsConfigured)
+        {
+            int total = s.Total ?? 0;
+            bool increased = !first && total > _lastTotal;
+            _lastTotal = total;
+            return increased;
+        }
+        if (P.ResultValue.IsConfigured)
+        {
+            double v = s.ResultValue ?? 0;
+            bool changed = !first && v != 0 && Math.Abs(v - _lastResultValue) > 1e-9;
+            _lastResultValue = v;
+            return changed;
+        }
+        return false;
+    }
+
+    /// <summary>PLC vừa có kết quả mới: chốt giá trị, phân định (nếu PLC không làm) và ghi lịch sử.</summary>
+    private void OnNewResult(PlcSnapshot s)
+    {
+        ResultQrText = ""; // Không để QR của mẫu trước cạnh giá trị mới đang chờ OK/NG.
+        if (!double.IsFinite(s.ResultValue ?? s.Distance) || !double.IsFinite(s.Force))
+        {
+            _pendingRecord = false;
+            _cycleResult = null;
+            StatusMessage = "Giá trị PLC không hợp lệ. Kiểm tra kiểu dữ liệu/hệ số của tag và đo lại.";
+            RaiseJudgeChanged();
+            return;
+        }
+        MeasuredValue = Math.Round(s.ResultValue ?? s.Distance, 2);
+        if (JudgeFromPlc) IsPass = s.JudgeNg == true ? false : s.JudgeOk == true ? true : null;
+        _cycleResult = new MeasurementResult
+        {
+            Serial = Serial, Model = Model, OrderNo = OrderNo, Line = Line,
+            Lsl = SelectedSpec!.Lsl, Usl = SelectedSpec.Usl,
+            Inspector = _settings.Inspector, PcName = Environment.MachineName,
+            Value = MeasuredValue.Value,
+            Force = Math.Round(s.Force, 2),
+            InspectedAt = s.Timestamp == default ? DateTime.Now : s.Timestamp,
+        };
 
         if (!JudgeFromPlc)
         {
@@ -447,89 +586,38 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 : null;
         }
 
-        _awaitingRecord = true;
+        _pendingRecord = true;
         TryRecord();
         RaiseJudgeChanged();
         CommandManager.InvalidateRequerySuggested();
     }
 
-    /// <summary>Ghi lịch sử khi đã đủ điều kiện: có OK/NG và (nếu serial nhập tại phần mềm) có serial mới.</summary>
+    /// <summary>Ghi lịch sử khi đã có OK/NG (từ PLC hoặc tự so quy cách).</summary>
     private void TryRecord()
     {
-        if (!_awaitingRecord) return;
+        if (!_pendingRecord) return;
 
         if (IsPass is not { } ok)
         {
             StatusMessage = JudgeFromPlc
-                ? "PLC báo đo xong – chờ kết quả OK/NG"
-                : "Đo xong nhưng chưa có quy cách để phân định";
-            return;
-        }
-        if (!SerialFromPlc && !HasFreshSerial)
-        {
-            StatusMessage = "Đã nhận kết quả đo – scan serial để lưu";
+                ? "PLC báo có kết quả mới – đang chờ bit OK/NG"
+                : "Có kết quả mới nhưng chưa có quy cách để phân định – kiểm tra danh mục quy cách.";
             return;
         }
 
-        _awaitingRecord = false;
-        StatusMessage = ok ? "Kết quả: PASS" : "Kết quả: NG";
+        if (_cycleResult is null) return;
+        _cycleResult.IsOk = ok;
+        _completedResult = _cycleResult;
+        _unsavedResults.Enqueue(_completedResult);
+        _cycleResult = null;
+        var qr = ResultQrFormatter.Format(_settings.ResultQrTemplate, _completedResult);
+        bool qrTooLong = System.Text.Encoding.UTF8.GetByteCount(qr) > 1500;
+        ResultQrText = qrTooLong ? "" : qr;
+        _pendingRecord = false;
         if (_settings.AutoSaveOnMeasureDone) SaveCurrent();
-        else StatusMessage += " – nhấn LƯU DỮ LIỆU để ghi lịch sử";
+        else StatusMessage = (ok ? "Kết quả: PASS" : "Kết quả: NG") + " – nhấn LƯU DỮ LIỆU để ghi lịch sử";
+        if (qrTooLong) StatusMessage = "Kết quả đã chốt nhưng nội dung QR quá dài. Rút ngắn mẫu trong CÀI ĐẶT.";
         RaiseJudgeChanged();
-    }
-
-    private bool HasFreshSerial => !string.IsNullOrWhiteSpace(Serial) && !_serialConsumed;
-
-    /// <summary>Nhận serial mới (từ PLC hoặc gõ/scan tại phần mềm) và bù các trường PLC không cung cấp.</summary>
-    private void ApplySerial(string serial, bool fromPlc)
-    {
-        bool pending = _awaitingRecord;
-        if (!fromPlc && !pending) ClearCurrentMeasurement();
-
-        Serial = serial;
-        _serialConsumed = false;
-        Note = "";
-
-        if (!OrderFromPlc)
-        {
-            var info = serial.Length == 0 ? null : _master.Lookup(serial);
-            OrderNo = info?.OrderNo ?? "";
-            Line = info?.Line ?? "";
-            Model = info?.Model ?? "";
-            if (!SpecFromPlc) ApplySpec(FindSpec(Model));
-            if (serial.Length > 0 && info is null)
-                StatusMessage = $"Không tìm thấy serial '{serial}' trong file master ({_master.FilePath})";
-            else if (info is not null)
-                StatusMessage = $"Đơn hàng {info.OrderNo} – {info.Model}";
-        }
-        else if (serial.Length > 0)
-        {
-            StatusMessage = "Nhận serial " + serial;
-        }
-
-        if (pending) TryRecord();
-        RefreshTrend();
-        RaiseJudgeChanged();
-        CommandManager.InvalidateRequerySuggested();
-    }
-
-    private void ApplyPlcSpec(double lsl, double usl)
-    {
-        if (usl <= lsl)
-        {
-            if (_currentSpec is not null) ApplySpec(null);
-            return;
-        }
-        if (_currentSpec is { } cur && cur.Lsl == lsl && cur.Usl == usl) return;
-        ApplySpec(new ModelSpec { Model = Model, Lsl = lsl, Usl = usl, Unit = "mm" });
-    }
-
-    private void ApplySpec(ModelSpec? spec)
-    {
-        _currentSpec = spec;
-        SpecText = spec is null ? "--" : FormatSpec(spec);
-        RefreshTrend();
-        OnPropertyChanged(nameof(StartHint));
     }
 
     private void SetCounters(int total, int ok, int ng)
@@ -541,115 +629,155 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(NgText));
     }
 
-    // ================= Thao tác người dùng =================
+    // ================= Scan serial của máy cần đo =================
 
-    private void LookupSerialFromInput()
+    private Task ScanAsync()
     {
-        if (SerialFromPlc) return;          // serial do PLC cấp, ô nhập chỉ hiển thị
-        var serial = SerialInput.Trim();
-        if (serial.Length == 0) return;
-        ApplySerial(serial, fromPlc: false);
+        if (!CanEditSelection || SelectedSpec is null || SelectedModel is null) return Task.CompletedTask;
+        var serial = QrInput.Trim();
+        if (serial.Length == 0) return Task.CompletedTask;
+        _serialReady = false;
+        if (serial.Length > 256 || serial.Any(char.IsControl))
+        {
+            StatusMessage = "Serial không hợp lệ (tối đa 256 ký tự, không chứa ký tự điều khiển).";
+            return Task.CompletedTask;
+        }
+        var info = _master.Lookup(serial);
+        ClearCurrentMeasurement();
+        Serial = serial;
+        OrderNo = info?.OrderNo ?? "";
+        Line = info?.Line ?? "";
+        QrInput = "";
+        _serialReady = true;
+        StatusMessage = $"Đã nhận serial {Serial} – {Model}, {SpecText}. Nhấn START.";
+        RaiseJudgeChanged();
+        return Task.CompletedTask;
     }
 
-    private async Task StartRunAsync()
+    /// <summary>Tắt mọi bit chủng loại khác, bật bit của chủng loại hiện tại; ghi LSL/USL xuống PLC nếu có cấu hình.</summary>
+    private async Task SendModelToPlcAsync()
     {
-        if (!PlcOnline)
-        {
-            StatusMessage = "PLC chưa kết nối, không thể START";
-            return;
-        }
-        IsRunning = true;
-        StatusMessage = "Đã gửi START – hiển thị theo dữ liệu PLC";
+        await _modelWriteGate.WaitAsync();
         try
         {
+            var target = (SelectedModel?.PlcBit ?? "").Trim();
+            ModelBitText = target;
+
+            if (!PlcOnline)
+            {
+                if (Model.Length > 0) StatusMessage = "PLC chưa kết nối – bit chủng loại sẽ được gửi khi kết nối lại";
+                return;
+            }
+
+            var allBits = SpecCatalog.AllPlcBits(Specs);
+
+            foreach (var bit in allBits.Where(b => !SameAddress(b, target)))
+                await _monitor.WriteBitAsync(bit, false);
+            if (target.Length > 0)
+                await _monitor.WriteBitAsync(target, true);
+
+            if (_currentSpec is { } spec)
+            {
+                await _monitor.WriteNumberAsync(P.SpecLslWrite, spec.Lsl);
+                await _monitor.WriteNumberAsync(P.SpecUslWrite, spec.Usl);
+            }
+
+            if (target.Length > 0)
+                StatusMessage = $"Đã bật bit {target} cho chủng loại {Model} – quy cách {SpecText}";
+            else if (Model.Length > 0)
+                StatusMessage = $"Chủng loại '{Model}' chưa gán bit PLC trong CÀI ĐẶT – PLC chưa nhận được chủng loại";
+        }
+        finally { _modelWriteGate.Release(); }
+    }
+
+    private async Task SendModelToPlcSafeAsync()
+    {
+        try { await SendModelToPlcAsync(); }
+        catch (Exception ex) { ReportError(ex); }
+    }
+
+    private static bool SameAddress(string a, string b)
+        => string.Equals(a.Replace(" ", ""), b.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+
+    // ================= START / STOP / RESET → bit lệnh xuống PLC =================
+
+    private async Task StartMachineAsync()
+    {
+        if (!CanEditSelection || !PlcOnline || !_hasSnapshot) return;
+        if (!string.IsNullOrWhiteSpace(QrInput)) await ScanAsync();
+        if (!_serialReady || SelectedSpec is null || SelectedModel is null) return;
+        _starting = true;
+        RaiseJudgeChanged();
+        await _commandGate.WaitAsync();
+        try
+        {
+            await SendModelToPlcAsync();
+            ClearCurrentMeasurement();
+            _measurementActive = true;
             await _monitor.WriteCommandAsync(P.StartCommand, true);
+            if (!RunningFromPlc) MachineRunning = true;
+            StatusMessage = $"Đã gửi START ({P.StartCommand.Address}) – đo liên tục với serial {Serial} đến khi STOP";
         }
         catch
         {
-            IsRunning = false;
+            _measurementActive = false;
+            _cycleResult = null;
             throw;
         }
+        finally { _commandGate.Release(); _starting = false; RaiseJudgeChanged(); }
     }
 
-    private async Task StopRunAsync()
+    private async Task StopMachineAsync()
     {
-        if (!RunningFromPlc) IsRunning = false;
-        StatusMessage = "Đã gửi STOP";
-        if (PlcOnline)
+        await _commandGate.WaitAsync();
+        try
+        {
             await _monitor.WriteCommandAsync(P.StopCommand, true);
-        if (RunningFromPlc) IsRunning = false;
+            _measurementActive = _pendingRecord = false;
+            _cycleResult = null;
+            if (!RunningFromPlc) MachineRunning = false;
+            RaiseJudgeChanged();
+            StatusMessage = $"Đã gửi STOP ({P.StopCommand.Address}) – máy tạm dừng";
+        }
+        finally { _commandGate.Release(); }
     }
 
     private async Task ResetAsync()
     {
-        IsRunning = false;
-        _awaitingRecord = false;
-        ClearCurrentMeasurement();
-        Serial = OrderNo = Line = Model = "";
-        SerialInput = "";
-        _plcSerialLast = "";
-        ApplySpec(null);
-        Note = "";
-        _serialConsumed = false;
-        RaiseJudgeChanged();
-        StatusMessage = "Đã RESET";
-        if (PlcOnline)
-            await _monitor.WriteCommandAsync(P.ResetCommand, true);
+        await _commandGate.WaitAsync();
+        try
+        {
+            if (PlcOnline && P.ResetCommand.IsConfigured)
+                await _monitor.WriteCommandAsync(P.ResetCommand, true);
+            _measurementActive = _pendingRecord = false;
+            _cycleResult = null;
+            if (!RunningFromPlc) MachineRunning = false;
+            InvalidateSerial();
+            RaiseJudgeChanged();
+            StatusMessage = "Đã RESET – scan serial mới để đo.";
+        }
+        finally { _commandGate.Release(); }
     }
+
+    // ================= Lưu / xuất =================
 
     private void SaveCurrent()
     {
-        if (MeasuredValue is not { } value)
+        int saved = 0;
+        while (_unsavedResults.TryPeek(out var result))
         {
-            StatusMessage = "Chưa có kết quả đo để lưu";
-            return;
+            result.No = _store.NextNo;
+            try { _store.Append(result); }
+            catch (Exception ex)
+            {
+                ReportError(new IOException("Không ghi được file kết quả: " + ex.Message, ex));
+                break; // Giữ kết quả chưa ghi để thử lại, không mất các mẫu khi vẫn đang đo.
+            }
+            _unsavedResults.Dequeue();
+            saved++;
+            StatusMessage = $"Đã lưu kết quả #{result.No} ({result.ResultText}) – serial {result.Serial}";
         }
-        if (_currentSaved)
-        {
-            StatusMessage = "Kết quả này đã được lưu rồi";
-            return;
-        }
-        if (IsPass is not { } ok)
-        {
-            StatusMessage = "Không thể lưu: chưa có kết quả OK/NG";
-            return;
-        }
-
-        var result = new MeasurementResult
-        {
-            No = _store.NextNo,
-            OrderNo = OrderNo,
-            Line = Line,
-            Model = Model,
-            Serial = Serial,
-            Force = Math.Round(_capturedForce, 2),
-            Value = value,
-            Lsl = _currentSpec?.Lsl ?? 0,
-            Usl = _currentSpec?.Usl ?? 0,
-            IsOk = ok,
-            InspectedAt = DateTime.Now,
-            Inspector = _settings.Inspector,
-            Note = Note.Trim(),
-            PcName = Environment.MachineName,
-        };
-
-        try
-        {
-            _store.Append(result);
-        }
-        catch (Exception ex)
-        {
-            ReportError(new IOException("Không ghi được file kết quả: " + ex.Message, ex));
-            return;
-        }
-
-        _currentSaved = true;
-        _serialConsumed = true;
-        _awaitingRecord = false;
-        if (!CountersFromPlc) RefreshStatistics();
-        RefreshHistograms();
-        RefreshTrend();
-        StatusMessage = $"Đã lưu kết quả #{result.No} ({result.ResultText})";
+        if (saved > 0) RefreshView();
         RaiseJudgeChanged();
         CommandManager.InvalidateRequerySuggested();
     }
@@ -660,11 +788,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         var path = ChooseExportPath?.Invoke(defaultName);
         if (string.IsNullOrEmpty(path)) return;
 
-        var rows = _store.All.ToList();
+        var rows = RecentRows.OrderBy(r => r.No).ToList();
         StatusMessage = "Đang xuất Excel...";
         await Task.Run(() => ExcelExporter.Export(rows, path));
         StatusMessage = $"Đã xuất {rows.Count} dòng ra Excel";
-        ShowMessage?.Invoke($"Đã xuất {rows.Count} kết quả ra file:\n{path}", false);
+        ShowMessage?.Invoke($"Đã xuất {rows.Count} kết quả ({RangeText()}) ra file:\n{path}", false);
     }
 
     private async Task OpenSettingsAsync()
@@ -684,16 +812,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         StatusMessage = $"Đã đăng nhập người kiểm tra: {_settings.Inspector}";
     }
 
-    private void ResetHistogram(string group)
-    {
-        _settings.HistogramResetTimes[group] = DateTime.Now;
-        TrySaveSettings();
-        RefreshHistograms();
-        StatusMessage = $"Đã reset histogram {group} – chỉ hiển thị kết quả đo từ bây giờ";
-    }
-
     private async Task ApplySettingsAsync(AppSettings settings)
     {
+        bool reconnect = PlcActive;
+        // Xóa cả bit model vừa bị xóa khỏi danh mục trước khi chuyển sang cấu hình mới.
+        await _modelWriteGate.WaitAsync();
+        try
+        {
+            if (PlcOnline)
+                foreach (var bit in SpecCatalog.AllPlcBits(Specs)) await _monitor.WriteBitAsync(bit, false);
+        }
+        finally { _modelWriteGate.Release(); }
+        await DisconnectAsync();
         _settings = settings;
         SettingsService.Save(settings);
 
@@ -706,15 +836,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             TryLoadStore();
         }
 
-        IsRunning = false;
-        _awaitingRecord = false;
-        _lastMeasureDone = false;
-        _plcSerialLast = "";
+        _pendingRecord = false;
         ClearCurrentMeasurement();
-        if (!SpecFromPlc) ApplySpec(FindSpec(Model));
+        if (!RunningFromPlc) MachineRunning = false;
+        InvalidateSerial();
+        LoadCatalog();
         RebuildHistogramGroups();
-        RefreshStatistics();
-        RefreshTrend();
+        RefreshView();
 
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(CompanyLabel));
@@ -723,12 +851,69 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(VersionText));
         OnPropertyChanged(nameof(ConnectionText));
         OnPropertyChanged(nameof(HistogramBins));
-        OnPropertyChanged(nameof(SerialFromPlc));
-        OnPropertyChanged(nameof(SerialPlaceholder));
         RaiseJudgeChanged();
 
-        await _monitor.StartAsync(settings.Plc);
-        StatusMessage = "Đã áp dụng cài đặt mới, đang kết nối lại PLC...";
+        if (reconnect)
+        {
+            await ConnectAsync();
+            StatusMessage = "Đã áp dụng cài đặt mới, đang kết nối lại PLC...";
+        }
+        else
+        {
+            StatusMessage = "Đã áp dụng cài đặt mới";
+        }
+    }
+
+    // ================= Bộ lọc ngày → bảng kết quả + histogram + bộ đếm =================
+
+    private IEnumerable<MeasurementResult> FilteredResults()
+    {
+        IEnumerable<MeasurementResult> q = _store.All;
+        if (_fromDate is { } from) q = q.Where(r => r.InspectedAt >= from);
+        if (_toDate is { } to) q = q.Where(r => r.InspectedAt < to.AddDays(1));
+        return q;
+    }
+
+    private string RangeText()
+        => (_fromDate, _toDate) switch
+        {
+            (null, null) => "tất cả các ngày",
+            ({ } f, null) => $"từ {f:dd/MM/yyyy}",
+            (null, { } t) => $"đến {t:dd/MM/yyyy}",
+            ({ } f, { } t) when f == t => $"ngày {f:dd/MM/yyyy}",
+            ({ } f, { } t) => $"{f:dd/MM/yyyy} – {t:dd/MM/yyyy}",
+        };
+
+    private void RefreshView()
+    {
+        var rows = FilteredResults().ToList();
+        RecentRows = rows.OrderByDescending(r => r.InspectedAt).ThenByDescending(r => r.No).ToList();
+
+        int ok = rows.Count(r => r.IsOk);
+        FilterSummary = $"{rows.Count:#,##0} kết quả ({RangeText()})   |   OK: {ok:#,##0}   |   NG: {rows.Count - ok:#,##0}";
+        if (!CountersFromPlc) SetCounters(rows.Count, ok, rows.Count - ok);
+
+        RefreshHistograms(rows);
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    /// <summary>Tạo lại danh sách khối histogram theo các nhóm trong cài đặt quy cách.</summary>
+    private void RebuildHistogramGroups()
+    {
+        HistogramGroups.Clear();
+        foreach (var spec in Specs)
+            HistogramGroups.Add(new HistogramGroupViewModel(spec.Name)
+            {
+                Lsl = spec.Lsl, Usl = spec.Usl,
+                SpecText = string.Join(" · ", spec.Models.Select(m => m.Name)),
+            });
+    }
+
+    private void RefreshHistograms(IReadOnlyList<MeasurementResult> rows)
+    {
+        foreach (var hg in HistogramGroups)
+            hg.Values = rows.Where(r => Math.Abs(r.Lsl - hg.Lsl) < 1e-6 && Math.Abs(r.Usl - hg.Usl) < 1e-6)
+                            .Select(r => r.Value).ToList();
     }
 
     // ================= Hỗ trợ =================
@@ -737,17 +922,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         MeasuredValue = null;
         IsPass = null;
-        _currentSaved = false;
-        _capturedForce = 0;
+        _completedResult = null;
+        ResultQrText = "";
+        _unsavedResults.Clear();
     }
-
-    private ModelSpec? FindSpec(string model)
-        => string.IsNullOrWhiteSpace(model)
-            ? null
-            : _settings.ModelSpecs.FirstOrDefault(m => string.Equals(m.Model.Trim(), model.Trim(), StringComparison.OrdinalIgnoreCase));
-
-    private static string FormatSpec(ModelSpec spec)
-        => string.Create(Inv, $"{spec.Lsl:0.#} ~ {spec.Usl:0.#} {spec.Unit}");
 
     private void TryLoadStore()
     {
@@ -759,91 +937,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         try { SettingsService.Save(_settings); }
         catch (Exception ex) { StatusMessage = "Không lưu được cài đặt: " + ex.Message; }
-    }
-
-    /// <summary>Bộ đếm theo lịch sử đã lưu (chỉ khi PLC không cung cấp bộ đếm).</summary>
-    private void RefreshStatistics()
-    {
-        if (CountersFromPlc) return;
-        int total = _store.All.Count;
-        int ok = _store.All.Count(r => r.IsOk);
-        SetCounters(total, ok, total - ok);
-    }
-
-    /// <summary>Tạo lại danh sách khối histogram theo các nhóm trong cài đặt quy cách.</summary>
-    private void RebuildHistogramGroups()
-    {
-        var groups = _settings.ModelSpecs
-            .Select(m => m.Group.Trim())
-            .Where(g => g.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (groups.Count == 0) groups.Add(AllGroupName);
-
-        HistogramGroups.Clear();
-        foreach (var g in groups)
-            HistogramGroups.Add(new HistogramGroupViewModel(g, ResetHistogram));
-        RefreshHistograms();
-    }
-
-    private void RefreshHistograms()
-    {
-        foreach (var hg in HistogramGroups)
-        {
-            var specs = _settings.ModelSpecs
-                .Where(m => string.Equals(m.Group.Trim(), hg.Group, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            IEnumerable<MeasurementResult> source = _store.All;
-            if (specs.Count > 0)
-            {
-                var models = specs.Select(m => m.Model.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                source = source.Where(r => models.Contains(r.Model.Trim()));
-            }
-            if (_settings.HistogramResetTimes.TryGetValue(hg.Group, out var resetAt))
-                source = source.Where(r => r.InspectedAt > resetAt);
-
-            hg.Values = source.Select(r => r.Value).ToList();
-            var spec = specs.FirstOrDefault();
-            hg.Lsl = spec?.Lsl ?? double.NaN;
-            hg.Usl = spec?.Usl ?? double.NaN;
-            hg.SpecText = spec is null ? "" : string.Create(Inv, $"Quy cách: {spec.Lsl:0.#}~{spec.Usl:0.#}{spec.Unit}");
-        }
-    }
-
-    /// <summary>Trend theo Line: trung bình mỗi ngày, lấy N ngày gần nhất có dữ liệu.</summary>
-    private void RefreshTrend()
-    {
-        var dates = _store.All
-            .Select(r => r.InspectedAt.Date)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .Take(Math.Max(2, _settings.TrendDays))
-            .OrderBy(d => d)
-            .ToList();
-
-        var inRange = dates.Count == 0
-            ? []
-            : _store.All.Where(r => r.InspectedAt.Date >= dates[0]).ToList();
-
-        var lines = inRange
-            .GroupBy(r => string.IsNullOrWhiteSpace(r.Line) ? "(không có line)" : r.Line.Trim(), StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new TrendSeries(
-                g.Key,
-                dates.Select(d =>
-                {
-                    var vals = g.Where(r => r.InspectedAt.Date == d).Select(r => r.Value).ToList();
-                    return vals.Count == 0 ? double.NaN : Math.Round(vals.Average(), 3);
-                }).ToList()))
-            .ToList();
-
-        TrendCategories = dates;
-        TrendLines = lines;
-
-        var spec = _currentSpec ?? _settings.ModelSpecs.FirstOrDefault();
-        TrendUsl = spec?.Usl ?? double.NaN;
-        TrendLsl = spec?.Lsl ?? double.NaN;
     }
 
     private void ReportError(Exception ex)

@@ -15,3 +15,15 @@ public sealed class EmptyToVisibleConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>Chuỗi có nội dung → Visible, rỗng → Collapsed (nhãn bit PLC cạnh chủng loại).</summary>
+public sealed class NotEmptyToVisibleConverter : IValueConverter
+{
+    public static NotEmptyToVisibleConverter Instance { get; } = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

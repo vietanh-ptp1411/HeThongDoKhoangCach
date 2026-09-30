@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:HeThongDoKhoangCach.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
-        Title="Cài đặt hệ thống" Width="980" Height="820" MinWidth="820" MinHeight="600"
+        Title="Cài đặt hệ thống" Width="1000" Height="820" MinWidth="820" MinHeight="600"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{StaticResource BgBrush}" FontFamily="Segoe UI" FontSize="13">
 
@@ -57,6 +57,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Label}" Text="Giao thức"/>
@@ -80,7 +81,10 @@
                             <Button Grid.Row="3" Grid.Column="3" Content="Kiểm tra kết nối" Style="{StaticResource PrimaryButton}"
                                     Height="30" HorizontalAlignment="Left" Margin="0,4" Command="{Binding TestConnectionCommand}"/>
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Text="{Binding TestResult}" TextWrapping="Wrap"
+                            <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,6,0,0" IsChecked="{Binding AutoConnectPlc}"
+                                      Content="Tự động kết nối PLC khi mở phần mềm (vẫn có nút KẾT NỐI PLC / NGẮT KẾT NỐI ở thanh trạng thái)"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="4" Text="{Binding TestResult}" TextWrapping="Wrap"
                                        Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
                         </Grid>
                     </StackPanel>
@@ -97,7 +101,7 @@
                             <TextBlock Style="{StaticResource CardTitle}" Text="BẢNG ĐỊA CHỈ PLC (TAGS)" VerticalAlignment="Center"/>
                         </DockPanel>
                         <TextBlock Style="{StaticResource Hint}"
-                                   Text="PLC cung cấp dữ liệu gì thì điền địa chỉ tag đó; ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (serial nhập tại máy tính, tra file master, quy cách theo chủng loại, tự so OK/NG, tự đếm). Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Kiểu String: chuỗi ASCII 2 ký tự/word, 'Độ dài' = số word; thứ tự word quyết định byte nào là ký tự trước (Mitsubishi LowHigh, Modbus thường HighLow). Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/>
+                                   Text="Phần mềm GHI: START (M0) / STOP (M15) / RESET và bit chủng loại (bảng bên dưới, M40..M50). Phần mềm ĐỌC liên tục: lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm, bit trạng thái. ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (tự so quy cách để ra OK/NG, tự đếm theo lịch sử). Kết quả mới được nhận biết theo sườn lên bit 'Đo xong'; nếu để trống thì theo bộ đếm TOTAL tăng, nếu cũng trống thì theo giá trị 'Kết quả đo' thay đổi. Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/>
                         <DataGrid Style="{StaticResource EditGrid}" ItemsSource="{Binding Tags}" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,10,0,0">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Nhóm" Binding="{Binding Group}" IsReadOnly="True" Width="90"/>
@@ -106,7 +110,6 @@
                                 <DataGridComboBoxColumn Header="Kiểu dữ liệu" Width="105"
                                                         ItemsSource="{x:Static vm:SettingsViewModel.DataTypes}"
                                                         SelectedItemBinding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"/>
-                                <DataGridTextColumn Header="Độ dài" Binding="{Binding Length, UpdateSourceTrigger=PropertyChanged}" Width="65"/>
                                 <DataGridTextColumn Header="Hệ số" Binding="{Binding Scale, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
                                 <DataGridComboBoxColumn Header="Thứ tự word" Width="105"
                                                         ItemsSource="{x:Static vm:SettingsViewModel.WordOrders}"
@@ -116,28 +119,44 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Quy cách ===== -->
+                <!-- ===== Chủng loại: quy cách + bit PLC ===== -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                     <StackPanel>
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                <Button Content="Thêm dòng" Style="{StaticResource SmallButton}" Command="{Binding AddSpecCommand}" Margin="0,0,8,0"/>
-                                <Button Content="Xóa dòng đã chọn" Style="{StaticResource SmallButton}" Command="{Binding RemoveSpecCommand}"/>
-                            </StackPanel>
-                            <TextBlock Style="{StaticResource CardTitle}" Text="QUY CÁCH THEO CHỦNG LOẠI" VerticalAlignment="Center"/>
-                        </DockPanel>
-                        <TextBlock Style="{StaticResource Hint}"
-                                   Text="Chủng loại phải trùng với cột Model trong file master. Nhóm histogram dùng để gộp các chủng loại có cùng quy cách vào một biểu đồ phân bố."/>
-                        <DataGrid Style="{StaticResource EditGrid}" ItemsSource="{Binding ModelSpecs}" SelectedItem="{Binding SelectedSpec}"
-                                  CanUserAddRows="False" CanUserDeleteRows="True" Margin="0,10,0,0">
+                        <TextBlock Style="{StaticResource CardTitle}" Text="DANH MỤC QUY CÁCH – MODEL"/>
+                        <TextBlock Style="{StaticResource Hint}" Text="Chọn một quy cách để sửa các model thuộc quy cách đó. Dữ liệu được lưu vào database khi bấm Lưu &amp; áp dụng."/>
+                        <TextBlock Text="{Binding DatabaseFilePath}" Margin="0,6"/>
+                        <DataGrid x:Name="SpecGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding Specs}" SelectedItem="{Binding SelectedSpec}" Height="150" CanUserAddRows="False">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Chủng loại" Binding="{Binding Model, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                                <DataGridTextColumn Header="Nhóm histogram" Binding="{Binding Group, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                                <DataGridTextColumn Header="LSL" Binding="{Binding Lsl, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90"/>
-                                <DataGridTextColumn Header="USL" Binding="{Binding Usl, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90"/>
-                                <DataGridTextColumn Header="Đơn vị" Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
+                                <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="50"/>
+                                <DataGridTextColumn Header="LSL (mm)" Binding="{Binding Lsl}" Width="100"/>
+                                <DataGridTextColumn Header="USL (mm)" Binding="{Binding Usl}" Width="100"/>
+                                <DataGridTextColumn Header="Điều kiện" Binding="{Binding Condition}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <StackPanel Orientation="Horizontal" Margin="0,6">
+                            <Button Content="Thêm quy cách" Command="{Binding AddSpecCommand}" Style="{StaticResource SmallButton}"/>
+                            <Button Content="Xóa quy cách" Command="{Binding RemoveSpecCommand}" Style="{StaticResource SmallButton}" Margin="8,0"/>
+                        </StackPanel>
+                        <DataGrid x:Name="ModelGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding SelectedSpec.Models}" SelectedItem="{Binding SelectedModel}" Height="170" CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="50"/>
+                                <DataGridTextColumn Header="Model" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Bit PLC (M / C)" Binding="{Binding PlcBit}" Width="180"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <StackPanel Orientation="Horizontal" Margin="0,6">
+                            <Button Content="Thêm model" Command="{Binding AddModelCommand}" Style="{StaticResource SmallButton}"/>
+                            <Button Content="Xóa model" Command="{Binding RemoveModelCommand}" Style="{StaticResource SmallButton}" Margin="8,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="MÃ QR KẾT QUẢ ĐO"/>
+                        <TextBlock Style="{StaticResource Hint}" Text="Mặc định mã QR chứa giá trị đo, ví dụ 3.70. Có thể ghép thêm serial, model và phân định theo định dạng phía nhận yêu cầu."/>
+                        <TextBlock Text="{Binding QrFields}" TextWrapping="Wrap" Margin="0,8"/>
+                        <TextBox Style="{StaticResource InputBox}" Text="{Binding ResultQrTemplate, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="{Binding QrPreview}" TextWrapping="Wrap" Margin="0,8"/>
                     </StackPanel>
                 </Border>
 
@@ -152,8 +171,6 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -183,17 +200,14 @@
                             <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
                             <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource Label}" Text="Số ngày trên trend chart"/>
-                            <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding TrendDays}" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
+                            <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
 
-                            <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
-                            <TextBox Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
-
-                            <CheckBox Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
-                                      Content="Tự động lưu kết quả ngay khi đã phân định PASS/NG (tắt nếu muốn bấm LƯU DỮ LIỆU thủ công)"/>
+                            <CheckBox Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
+                                      Content="Tự động lưu kết quả ngay khi PLC gửi kết quả mới và đã có PASS/NG (tắt nếu muốn bấm LƯU DỮ LIỆU thủ công)"/>
                         </Grid>
                         <TextBlock Style="{StaticResource Hint}"
-                                   Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. File master gồm các cột: Key, OrderNo, Line, Model – Key là serial đầy đủ hoặc tiền tố serial (phần trước dấu gạch ngang)."/>
+                                   Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. File master gồm các cột: Key, OrderNo, Line, Model – Key là serial đầy đủ hoặc tiền tố serial (phần trước dấu gạch ngang); dùng để bổ sung đơn hàng và line theo serial. Quy cách và model do người vận hành chọn."/>
                     </StackPanel>
                 </Border>
             </StackPanel>

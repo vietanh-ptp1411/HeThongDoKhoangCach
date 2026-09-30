@@ -76,26 +76,22 @@ public sealed class SettingsViewModel : ViewModelBase
     /// <summary>Danh mục tag: nhóm, tên hiển thị, thuộc tính trong <see cref="PlcSettings"/>, bắt buộc, getter/setter.</summary>
     private static readonly (string Group, string Name, string Key, bool Required, Func<PlcSettings, TagDefinition> Get, Action<PlcSettings, TagDefinition> Set)[] TagMap =
     [
+        ("Lệnh", "START (máy chạy)", nameof(PlcSettings.StartCommand), true, p => p.StartCommand, (p, t) => p.StartCommand = t),
+        ("Lệnh", "STOP (tạm dừng)", nameof(PlcSettings.StopCommand), false, p => p.StopCommand, (p, t) => p.StopCommand = t),
+        ("Lệnh", "RESET (xóa giá trị)", nameof(PlcSettings.ResetCommand), false, p => p.ResetCommand, (p, t) => p.ResetCommand = t),
         ("Giá trị đo", "Lực căng (Loadcell)", nameof(PlcSettings.LoadcellValue), true, p => p.LoadcellValue, (p, t) => p.LoadcellValue = t),
         ("Giá trị đo", "Khoảng cách", nameof(PlcSettings.DistanceValue), true, p => p.DistanceValue, (p, t) => p.DistanceValue = t),
-        ("Giá trị đo", "Kết quả đo chốt", nameof(PlcSettings.ResultValue), false, p => p.ResultValue, (p, t) => p.ResultValue = t),
-        ("Quy cách", "LSL (giới hạn dưới)", nameof(PlcSettings.SpecLsl), false, p => p.SpecLsl, (p, t) => p.SpecLsl = t),
-        ("Quy cách", "USL (giới hạn trên)", nameof(PlcSettings.SpecUsl), false, p => p.SpecUsl, (p, t) => p.SpecUsl = t),
-        ("Đơn hàng", "Serial (Số máy)", nameof(PlcSettings.SerialText), false, p => p.SerialText, (p, t) => p.SerialText = t),
-        ("Đơn hàng", "Dòng hàng (Đơn hàng)", nameof(PlcSettings.OrderNoText), false, p => p.OrderNoText, (p, t) => p.OrderNoText = t),
-        ("Đơn hàng", "Line", nameof(PlcSettings.LineText), false, p => p.LineText, (p, t) => p.LineText = t),
-        ("Đơn hàng", "Chủng loại", nameof(PlcSettings.ModelText), false, p => p.ModelText, (p, t) => p.ModelText = t),
+        ("Giá trị đo", "Kết quả đo (chốt)", nameof(PlcSettings.ResultValue), false, p => p.ResultValue, (p, t) => p.ResultValue = t),
         ("Phân định", "Kết quả OK", nameof(PlcSettings.JudgeOk), false, p => p.JudgeOk, (p, t) => p.JudgeOk = t),
         ("Phân định", "Kết quả NG", nameof(PlcSettings.JudgeNg), false, p => p.JudgeNg, (p, t) => p.JudgeNg = t),
         ("Bộ đếm", "TOTAL", nameof(PlcSettings.TotalCount), false, p => p.TotalCount, (p, t) => p.TotalCount = t),
         ("Bộ đếm", "OK", nameof(PlcSettings.OkCount), false, p => p.OkCount, (p, t) => p.OkCount = t),
         ("Bộ đếm", "NG", nameof(PlcSettings.NgCount), false, p => p.NgCount, (p, t) => p.NgCount = t),
+        ("Trạng thái", "Đo xong (kết quả mới)", nameof(PlcSettings.MeasureDone), false, p => p.MeasureDone, (p, t) => p.MeasureDone = t),
         ("Trạng thái", "Loadcell ổn định", nameof(PlcSettings.LoadcellStable), false, p => p.LoadcellStable, (p, t) => p.LoadcellStable = t),
-        ("Trạng thái", "Đo xong (Measure Done)", nameof(PlcSettings.MeasureDone), true, p => p.MeasureDone, (p, t) => p.MeasureDone = t),
-        ("Trạng thái", "PLC đang chạy", nameof(PlcSettings.RunningState), false, p => p.RunningState, (p, t) => p.RunningState = t),
-        ("Lệnh", "START", nameof(PlcSettings.StartCommand), true, p => p.StartCommand, (p, t) => p.StartCommand = t),
-        ("Lệnh", "STOP", nameof(PlcSettings.StopCommand), false, p => p.StopCommand, (p, t) => p.StopCommand = t),
-        ("Lệnh", "RESET", nameof(PlcSettings.ResetCommand), false, p => p.ResetCommand, (p, t) => p.ResetCommand = t),
+        ("Trạng thái", "Máy đang chạy", nameof(PlcSettings.RunningState), false, p => p.RunningState, (p, t) => p.RunningState = t),
+        ("Quy cách", "LSL ghi xuống PLC", nameof(PlcSettings.SpecLslWrite), false, p => p.SpecLslWrite, (p, t) => p.SpecLslWrite = t),
+        ("Quy cách", "USL ghi xuống PLC", nameof(PlcSettings.SpecUslWrite), false, p => p.SpecUslWrite, (p, t) => p.SpecUslWrite = t),
     ];
 
     private readonly AppSettings _draft;
@@ -107,26 +103,44 @@ public sealed class SettingsViewModel : ViewModelBase
         Tags = new ObservableCollection<TagRow>(TagMap.Select(m => new TagRow(m.Group, m.Name, m.Key, m.Required)));
         LoadTagsFrom(_draft.Plc);
 
-        ModelSpecs = new ObservableCollection<ModelSpec>(_draft.ModelSpecs.Select(m => m.Clone()));
+        Specs = new ObservableCollection<SpecDefinition>(new SpecDatabase(SettingsService.ResolvePath(_draft.DatabaseFilePath)).Load());
+        SelectedSpec = Specs.FirstOrDefault();
 
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync, null, ex => TestResult = "Lỗi: " + ex.Message);
         UseMcDefaultsCommand = new RelayCommand(() => ApplyDefaults(mc: true));
         UseModbusDefaultsCommand = new RelayCommand(() => ApplyDefaults(mc: false));
-        AddSpecCommand = new RelayCommand(() => ModelSpecs.Add(new ModelSpec { Model = "", Group = "", Lsl = 3, Usl = 4 }));
-        RemoveSpecCommand = new RelayCommand(() => { if (SelectedSpec is { } s) ModelSpecs.Remove(s); }, () => SelectedSpec is not null);
+        AddSpecCommand = new RelayCommand(() =>
+        {
+            var spec = new SpecDefinition { SortOrder = Specs.Count + 1, Lsl = 3, Usl = 4, Condition = SpecCatalog.DefaultCondition };
+            Specs.Add(spec);
+            SelectedSpec = spec;
+        });
+        RemoveSpecCommand = new RelayCommand(() => { if (SelectedSpec is { } s) Specs.Remove(s); SelectedSpec = Specs.FirstOrDefault(); }, () => SelectedSpec is not null);
+        AddModelCommand = new RelayCommand(() => SelectedSpec?.Models.Add(new ModelDefinition { SortOrder = (SelectedSpec?.Models.Count ?? 0) + 1 }), () => SelectedSpec is not null);
+        RemoveModelCommand = new RelayCommand(() => { if (SelectedModel is { } m) SelectedSpec?.Models.Remove(m); }, () => SelectedModel is not null);
     }
 
     public ObservableCollection<TagRow> Tags { get; }
-    public ObservableCollection<ModelSpec> ModelSpecs { get; }
-
-    private ModelSpec? _selectedSpec;
-    public ModelSpec? SelectedSpec { get => _selectedSpec; set => SetProperty(ref _selectedSpec, value); }
-
+    public ObservableCollection<SpecDefinition> Specs { get; }
+    private SpecDefinition? _selectedSpec;
+    public SpecDefinition? SelectedSpec { get => _selectedSpec; set { if (SetProperty(ref _selectedSpec, value)) SelectedModel = null; } }
+    private ModelDefinition? _selectedModel;
+    public ModelDefinition? SelectedModel { get => _selectedModel; set => SetProperty(ref _selectedModel, value); }
     public ICommand TestConnectionCommand { get; }
     public ICommand UseMcDefaultsCommand { get; }
     public ICommand UseModbusDefaultsCommand { get; }
     public ICommand AddSpecCommand { get; }
     public ICommand RemoveSpecCommand { get; }
+    public ICommand AddModelCommand { get; }
+    public ICommand RemoveModelCommand { get; }
+    public string DatabaseFilePath => _draft.DatabaseFilePath;
+    public string ResultQrTemplate
+    {
+        get => _draft.ResultQrTemplate;
+        set { _draft.ResultQrTemplate = value; OnPropertyChanged(); OnPropertyChanged(nameof(QrPreview)); }
+    }
+    public string QrPreview => ResultQrFormatter.Format(ResultQrTemplate, ResultQrFormatter.Sample());
+    public string QrFields => string.Join("  ", ResultQrFormatter.Fields.Select(f => "{" + f + "}"));
 
     // ----- Kết nối -----
 
@@ -150,6 +164,7 @@ public sealed class SettingsViewModel : ViewModelBase
     public byte UnitId { get => _draft.Plc.UnitId; set { _draft.Plc.UnitId = value; OnPropertyChanged(); } }
     public int PollIntervalMs { get => _draft.Plc.PollIntervalMs; set { _draft.Plc.PollIntervalMs = value; OnPropertyChanged(); } }
     public int TimeoutMs { get => _draft.Plc.TimeoutMs; set { _draft.Plc.TimeoutMs = value; OnPropertyChanged(); } }
+    public bool AutoConnectPlc { get => _draft.AutoConnectPlc; set { _draft.AutoConnectPlc = value; OnPropertyChanged(); } }
 
     private string _testResult = "";
     public string TestResult { get => _testResult; private set => SetProperty(ref _testResult, value); }
@@ -163,7 +178,6 @@ public sealed class SettingsViewModel : ViewModelBase
     public string MasterFilePath { get => _draft.MasterFilePath; set { _draft.MasterFilePath = value; OnPropertyChanged(); } }
     public string ResultFilePath { get => _draft.ResultFilePath; set { _draft.ResultFilePath = value; OnPropertyChanged(); } }
     public bool AutoSaveOnMeasureDone { get => _draft.AutoSaveOnMeasureDone; set { _draft.AutoSaveOnMeasureDone = value; OnPropertyChanged(); } }
-    public int TrendDays { get => _draft.TrendDays; set { _draft.TrendDays = value; OnPropertyChanged(); } }
     public int HistogramBins { get => _draft.HistogramBins; set { _draft.HistogramBins = value; OnPropertyChanged(); } }
 
     // ----- Kiểm tra & kết xuất -----
@@ -186,48 +200,53 @@ public sealed class SettingsViewModel : ViewModelBase
             if (row.Required && !hasAddress) return $"Địa chỉ '{row.Name}' là bắt buộc, không được để trống.";
             if (!hasAddress) continue;
 
-            if (row.DataType == TagDataType.String && row.Length is < 1 or > 120)
-                return $"'{row.Name}': độ dài chuỗi phải trong 1..120 word.";
-
-            bool isCommandOrFlag = row.Group is "Lệnh" or "Trạng thái" or "Phân định";
-            if (isCommandOrFlag && row.DataType == TagDataType.String)
-                return $"'{row.Name}' là bit/cờ, không dùng kiểu String.";
-            if (row.Group is "Giá trị đo" or "Quy cách" or "Bộ đếm" && row.DataType is TagDataType.String or TagDataType.Bit)
+            if (row.DataType == TagDataType.String)
+                return $"'{row.Name}': không dùng kiểu String cho tag này.";
+            if (row.Group is "Giá trị đo" or "Quy cách" or "Bộ đếm" && row.DataType == TagDataType.Bit)
                 return $"'{row.Name}' phải là kiểu số (Int16/Int32/Float32...).";
 
             if (IsNetworkProtocol)
             {
-                var err = ValidateAddress(row.Address);
+                var err = ValidateAddress(row.Address, mustBeBit: false);
                 if (err is not null) return $"Địa chỉ '{row.Name}' = '{row.Address}': {err}";
             }
         }
 
-        foreach (var spec in ModelSpecs.Where(m => !string.IsNullOrWhiteSpace(m.Model)))
+        var catalogError = SpecDatabase.Validate(Specs.ToList());
+        if (catalogError is not null) return catalogError;
+        foreach (var model in Specs.SelectMany(s => s.Models).Where(m => m.HasPlcBit))
         {
-            if (spec.Lsl >= spec.Usl)
-                return $"Chủng loại '{spec.Model}': LSL ({spec.Lsl.ToString(CultureInfo.InvariantCulture)}) phải nhỏ hơn USL ({spec.Usl.ToString(CultureInfo.InvariantCulture)}).";
+            if (!IsNetworkProtocol) continue;
+            var err = ValidateAddress(model.PlcBit, mustBeBit: true);
+            if (err is not null) return $"Bit của model '{model.Name}': {err}";
         }
+        if (ResultQrTemplate.Length > 512) return "Mẫu QR tối đa 512 ký tự.";
+        var unknown = System.Text.RegularExpressions.Regex.Matches(ResultQrTemplate, @"\{(\w+)\}")
+            .Select(m => m.Groups[1].Value).FirstOrDefault(f => !ResultQrFormatter.Fields.Contains(f, StringComparer.OrdinalIgnoreCase));
+        if (unknown is not null) return $"Trường QR không hợp lệ: {{{unknown}}}.";
 
-        if (TrendDays is < 2 or > 60) return "Số ngày trend chart phải trong 2..60.";
         if (HistogramBins is < 4 or > 100) return "Số cột histogram phải trong 4..100.";
         if (string.IsNullOrWhiteSpace(MasterFilePath)) return "Chưa chọn file master.";
         if (string.IsNullOrWhiteSpace(ResultFilePath)) return "Chưa đặt đường dẫn file kết quả.";
         return null;
     }
 
-    private string? ValidateAddress(string address)
+    private string? ValidateAddress(string address, bool mustBeBit)
     {
         try
         {
             if (Protocol == PlcProtocol.McProtocol3E)
             {
-                _ = McDevice.Parse(address);
+                var dev = McDevice.Parse(address);
+                if (mustBeBit && !dev.IsBit) return "phải là thiết bị bit (M, L, B, Y...)";
             }
             else if (Protocol == PlcProtocol.ModbusTcp)
             {
                 var s = address.Trim().ToUpperInvariant();
                 bool ok = s.StartsWith("HR") || s.StartsWith("IR") || s.StartsWith("DI") || s.StartsWith("C") || s.All(char.IsDigit);
                 if (!ok) return "dùng HRxxx, IRxxx, Cxxx, DIxxx hoặc địa chỉ số 4xxxx/3xxxx/0xxxx/1xxxx";
+                if (mustBeBit && !(s.StartsWith("C") || (s.All(char.IsDigit) && s.StartsWith('0'))))
+                    return "phải là coil (Cxxx hoặc 0xxxx)";
             }
             return null;
         }
@@ -240,18 +259,8 @@ public sealed class SettingsViewModel : ViewModelBase
     public AppSettings Build()
     {
         ApplyTagsTo(_draft.Plc);
-        _draft.ModelSpecs = ModelSpecs
-            .Where(m => !string.IsNullOrWhiteSpace(m.Model))
-            .Select(m => new ModelSpec
-            {
-                Model = m.Model.Trim(),
-                Group = m.Group.Trim(),
-                Lsl = m.Lsl,
-                Usl = m.Usl,
-                Unit = string.IsNullOrWhiteSpace(m.Unit) ? "mm" : m.Unit.Trim(),
-            })
-            .ToList();
         _draft.Plc.IpAddress = _draft.Plc.IpAddress.Trim();
+        new SpecDatabase(SettingsService.ResolvePath(_draft.DatabaseFilePath)).Save(Specs.ToList());
         _draft.MasterFilePath = _draft.MasterFilePath.Trim();
         _draft.ResultFilePath = _draft.ResultFilePath.Trim();
         return _draft;
@@ -263,7 +272,7 @@ public sealed class SettingsViewModel : ViewModelBase
         ApplyTagsTo(plc);
 
         TestResult = "Đang kết nối...";
-        await using var client = PlcClientFactory.Create(plc);
+        await using var client = PlcClientFactory.Create(plc, Specs.ToList());
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(plc.TimeoutMs + 1500));
         await client.ConnectAsync(cts.Token);
 
@@ -287,6 +296,21 @@ public sealed class SettingsViewModel : ViewModelBase
         else _draft.Plc.ApplyModbusDefaults();
         LoadTagsFrom(_draft.Plc);
         OnPropertyChanged(nameof(Port));
+
+        // Bit chủng loại: M40.. (MC) ↔ C40.. (Modbus coil)
+        foreach (var model in Specs.SelectMany(s => s.Models))
+        {
+            var bit = (model.PlcBit ?? "").Trim().ToUpperInvariant();
+            if (bit.Length < 2) continue;
+            if (mc && bit.StartsWith('C') && bit[1..].All(char.IsDigit)) model.PlcBit = "M" + bit[1..];
+            else if (!mc && bit.StartsWith('M') && bit[1..].All(char.IsDigit)) model.PlcBit = "C" + bit[1..];
+        }
+        foreach (var spec in Specs)
+        {
+            var models = spec.Models.ToList();
+            spec.Models.Clear();
+            foreach (var model in models) spec.Models.Add(model);
+        }
     }
 
     private void LoadTagsFrom(PlcSettings plc)

@@ -6,7 +6,7 @@ namespace HeThongDoKhoangCach.Views;
 
 public partial class StatisticsWindow : Window
 {
-    public StatisticsWindow(IReadOnlyList<MeasurementResult> results, IReadOnlyList<ModelSpec> specs)
+    public StatisticsWindow(IReadOnlyList<MeasurementResult> results, IReadOnlyList<SpecDefinition> specs)
     {
         InitializeComponent();
         DataContext = new StatisticsViewModel(results, specs);

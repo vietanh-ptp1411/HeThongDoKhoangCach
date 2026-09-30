@@ -37,24 +37,15 @@ public static class SettingsService
         }
 
         settings ??= new AppSettings();
-        if (settings.ModelSpecs.Count == 0) settings.ModelSpecs = AppSettings.DefaultModelSpecs();
+        settings.Plc ??= new PlcSettings();
         if (settings.HistogramBins < 4) settings.HistogramBins = 24;
-        if (settings.TrendDays < 2) settings.TrendDays = 10;
-        settings.HistogramResetTimes ??= new(StringComparer.OrdinalIgnoreCase);
-        // Tiêu đề mặc định cũ (bản trước) → đổi sang tiêu đề theo mock PDF.
+        if (settings.Plc.PollIntervalMs < 50) settings.Plc.PollIntervalMs = 200;
+        settings.Plc.SpecLslWrite ??= new TagDefinition { DataType = TagDataType.Float32 };
+        settings.Plc.SpecUslWrite ??= new TagDefinition { DataType = TagDataType.Float32 };
+
+        // Tiêu đề mặc định của bản trước → tiêu đề theo mock mới của khách.
         if (string.Equals(settings.Title, AppSettings.LegacyDefaultTitle, StringComparison.Ordinal))
             settings.Title = new AppSettings().Title;
-
-        // Tên nhóm histogram cũ → tên hiển thị theo mock ("HISTOGRAM : CPX - GSM").
-        foreach (var spec in settings.ModelSpecs)
-        {
-            spec.Group = spec.Group.Trim() switch
-            {
-                "CPX/GSM" => "CPX - GSM",
-                "NF/M1-M2/PP1" => "NF - M1 - M2 - PP1",
-                var g => g,
-            };
-        }
 
         if (!File.Exists(FilePath))
         {

@@ -32,22 +32,16 @@ public sealed class StatRow
 /// <summary>Màn THỐNG KÊ: tổng hợp OK/NG, trung bình, độ lệch chuẩn, Cpk theo chủng loại và theo line.</summary>
 public sealed class StatisticsViewModel : ViewModelBase
 {
-    public StatisticsViewModel(IReadOnlyList<MeasurementResult> all, IReadOnlyList<ModelSpec> specs)
+    public StatisticsViewModel(IReadOnlyList<MeasurementResult> all, IReadOnlyList<SpecDefinition> specs)
     {
-        var byModel = new List<StatRow>();
-        foreach (var spec in specs)
-        {
-            var rows = all.Where(r => string.Equals(r.Model.Trim(), spec.Model.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
-            byModel.Add(Build(spec.Model, rows, spec, spec.Group, spec.SpecText));
-        }
-        var known = specs.Select(s => s.Model.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var g in all.Where(r => !known.Contains(r.Model.Trim()))
-                             .GroupBy(r => r.Model.Trim(), StringComparer.OrdinalIgnoreCase)
-                             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            byModel.Add(Build(g.Key.Length == 0 ? "(không rõ)" : g.Key, g.ToList(), null, "", ""));
-        }
-        ByModel = byModel;
+        // Giữ giới hạn đã lưu của từng kết quả; không áp quy cách mới cho lịch sử cũ.
+        ByModel = all.GroupBy(r => (r.Model, r.Lsl, r.Usl))
+            .OrderBy(g => g.Key.Model).ThenBy(g => g.Key.Lsl)
+            .Select(g =>
+            {
+                var spec = new SpecDefinition { Lsl = g.Key.Lsl, Usl = g.Key.Usl };
+                return Build(g.Key.Model, g.ToList(), spec, spec.Name, spec.Name);
+            }).ToList();
 
         ByLine = all.GroupBy(r => r.Line.Trim(), StringComparer.OrdinalIgnoreCase)
                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
@@ -64,7 +58,7 @@ public sealed class StatisticsViewModel : ViewModelBase
     public StatRow Overall { get; }
     public string SummaryText { get; }
 
-    private static StatRow Build(string key, List<MeasurementResult> rows, ModelSpec? spec, string group, string specText)
+    private static StatRow Build(string key, List<MeasurementResult> rows, SpecDefinition? spec, string group, string specText)
     {
         int total = rows.Count;
         int ok = rows.Count(r => r.IsOk);

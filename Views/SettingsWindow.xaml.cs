@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using HeThongDoKhoangCach.Models;
 using HeThongDoKhoangCach.Services;
 using HeThongDoKhoangCach.ViewModels;
@@ -23,14 +24,23 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        if (!SpecGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !SpecGrid.CommitEdit(DataGridEditingUnit.Row, true)
+            || !ModelGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !ModelGrid.CommitEdit(DataGridEditingUnit.Row, true)) return;
         var error = _viewModel.Validate();
         if (error is not null)
         {
             MessageBox.Show(this, error, "Cài đặt chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        Result = _viewModel.Build();
-        DialogResult = true;
+        try
+        {
+            Result = _viewModel.Build();
+            DialogResult = true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Không lưu được danh mục: " + ex.Message, "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
