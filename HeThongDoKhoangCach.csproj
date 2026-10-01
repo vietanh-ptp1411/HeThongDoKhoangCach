@@ -8,8 +8,9 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>HeThongDoKhoangCach</RootNamespace>
     <AssemblyName>HeThongDoKhoangCach</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,7 +22,7 @@
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
     <Page Remove="Tests\**\*.xaml" />
-    <None Update="Data\master.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Remove="Data\master.csv" />
   </ItemGroup>
 
 </Project>

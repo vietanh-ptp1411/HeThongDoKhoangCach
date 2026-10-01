@@ -7,10 +7,10 @@ namespace HeThongDoKhoangCach.Models;
 public sealed class MeasurementResult
 {
     public int No { get; set; }
-    public string OrderNo { get; set; } = "";
-    public string Line { get; set; } = "";
     public string Model { get; set; } = "";
     public string Serial { get; set; } = "";
+    /// <summary>Nội dung QR đã tạo khi chốt kết quả; trống với dữ liệu cũ chưa lưu QR.</summary>
+    public string QrText { get; set; } = "";
     /// <summary>Lực căng (gf) tại thời điểm đo.</summary>
     public double Force { get; set; }
     /// <summary>Khoảng cách đo được (mm).</summary>

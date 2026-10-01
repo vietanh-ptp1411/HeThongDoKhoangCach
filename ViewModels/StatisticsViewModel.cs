@@ -3,7 +3,7 @@ using HeThongDoKhoangCach.Models;
 
 namespace HeThongDoKhoangCach.ViewModels;
 
-/// <summary>Một dòng thống kê (theo chủng loại hoặc theo line).</summary>
+/// <summary>Một dòng thống kê theo chủng loại và quy cách.</summary>
 public sealed class StatRow
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -29,7 +29,7 @@ public sealed class StatRow
     public string CpkText => Cpk is { } c ? c.ToString("0.00", Inv) : "-";
 }
 
-/// <summary>Màn THỐNG KÊ: tổng hợp OK/NG, trung bình, độ lệch chuẩn, Cpk theo chủng loại và theo line.</summary>
+/// <summary>Màn THỐNG KÊ: tổng hợp OK/NG, trung bình, độ lệch chuẩn, Cpk theo chủng loại và quy cách.</summary>
 public sealed class StatisticsViewModel : ViewModelBase
 {
     public StatisticsViewModel(IReadOnlyList<MeasurementResult> all, IReadOnlyList<SpecDefinition> specs)
@@ -43,18 +43,12 @@ public sealed class StatisticsViewModel : ViewModelBase
                 return Build(g.Key.Model, g.ToList(), spec, spec.Name, spec.Name);
             }).ToList();
 
-        ByLine = all.GroupBy(r => r.Line.Trim(), StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(g => Build(g.Key.Length == 0 ? "(không rõ)" : g.Key, g.ToList(), null, "", ""))
-                    .ToList();
-
         Overall = Build("Tổng cộng", all.ToList(), null, "", "");
         SummaryText = $"Tổng: {Overall.Total}   |   OK: {Overall.Ok}   |   NG: {Overall.Ng}   |   Tỉ lệ OK: {Overall.OkRateText}"
                     + (all.Count > 0 ? $"   |   Từ {all.Min(r => r.InspectedAt):dd/MM/yyyy} đến {all.Max(r => r.InspectedAt):dd/MM/yyyy}" : "");
     }
 
     public IReadOnlyList<StatRow> ByModel { get; }
-    public IReadOnlyList<StatRow> ByLine { get; }
     public StatRow Overall { get; }
     public string SummaryText { get; }
 

@@ -14,10 +14,19 @@ public static partial class ResultQrFormatter
 
     /// <summary>Các trường dùng được trong mẫu (hiển thị ở màn cài đặt).</summary>
     public static readonly string[] Fields =
-        ["Value", "Serial", "Model", "Spec", "Lsl", "Usl", "Result", "Force", "Date", "Time", "DateTime", "Inspector", "OrderNo", "Line"];
+        ["Value", "Serial", "Model", "Spec", "Lsl", "Usl", "Result", "Force", "Date", "Time", "DateTime", "Inspector"];
 
     [GeneratedRegex(@"\{(\w+)\}")]
     private static partial Regex FieldRegex();
+
+    /// <summary>Mẫu cũ dùng thông tin đã bỏ được đưa về giá trị đo; QR trong lịch sử không thay đổi.</summary>
+    public static string NormalizeTemplate(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template)) return DefaultTemplate;
+        return FieldRegex().Matches(template).Any(m =>
+            m.Groups[1].Value.Equals("OrderNo", StringComparison.OrdinalIgnoreCase) ||
+            m.Groups[1].Value.Equals("Line", StringComparison.OrdinalIgnoreCase)) ? DefaultTemplate : template;
+    }
 
     public static string Format(string? template, MeasurementResult r)
     {
@@ -37,8 +46,6 @@ public static partial class ResultQrFormatter
             "time" => r.InspectedAt.ToString("HH:mm:ss", inv),
             "datetime" => r.InspectedAt.ToString("yyyy-MM-dd HH:mm:ss", inv),
             "inspector" => r.Inspector,
-            "orderno" => r.OrderNo,
-            "line" => r.Line,
             _ => m.Value,   // trường lạ giữ nguyên để người cài đặt thấy ngay
         });
     }
@@ -47,8 +54,6 @@ public static partial class ResultQrFormatter
     public static MeasurementResult Sample() => new()
     {
         Serial = "985X57200-00123",
-        OrderNo = "BB09320001",
-        Line = "WAA2",
         Model = "CPX",
         Force = 2.0,
         Value = 3.70,

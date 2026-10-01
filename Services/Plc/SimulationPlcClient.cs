@@ -5,8 +5,8 @@ namespace HeThongDoKhoangCach.Services.Plc;
 /// <summary>
 /// PLC mô phỏng theo luồng vận hành của khách hàng:
 /// phần mềm bật bit START (máy chạy) / STOP (tạm dừng) / RESET (xóa giá trị) và bật bit chủng loại (M40..M50) khi chọn model;
-/// khi máy đang chạy và đã có chủng loại, đo liên tục: mỗi lượt mất 1,5 giây, ghi kết quả đo,
-/// phân định OK/NG, tăng bộ đếm rồi bật bit Đo xong (giữ 0,6 giây), nghỉ 3 giây rồi đo tiếp đến khi STOP.
+/// mỗi START đo một lần trong 1,5 giây, ghi kết quả đo, phân định OK/NG,
+/// tăng bộ đếm rồi bật bit Đo xong (giữ 0,6 giây), dừng và chờ START tiếp theo.
 /// Lực căng và khoảng cách được cập nhật liên tục ở mỗi lần đọc.
 /// </summary>
 public sealed class SimulationPlcClient : IPlcClient
@@ -220,6 +220,7 @@ public sealed class SimulationPlcClient : IPlcClient
                         SetBit(_s.JudgeNg.Address, !ok);
                         PublishCounters();
                         SetBit(_s.MeasureDone.Address, true);   // bật cuối cùng, sau khi mọi dữ liệu đã sẵn
+                        _running = false;
                         _phase = Phase.Done;
                         _phaseAt = now;
                     }

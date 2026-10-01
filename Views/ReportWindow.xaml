@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:HeThongDoKhoangCach.ViewModels"
+        xmlns:ctrl="clr-namespace:HeThongDoKhoangCach.Controls"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ReportViewModel}"
         Title="Báo cáo kết quả kiểm tra" Width="1360" Height="780" MinWidth="1000" MinHeight="560"
@@ -40,10 +41,6 @@
                     <DatePicker SelectedDate="{Binding ToDate}" Width="130" Height="30"/>
                 </StackPanel>
                 <StackPanel Style="{StaticResource FilterField}">
-                    <TextBlock Text="Line" Style="{StaticResource FilterLabel}"/>
-                    <ComboBox ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}" Width="120" Height="30"/>
-                </StackPanel>
-                <StackPanel Style="{StaticResource FilterField}">
                     <TextBlock Text="Chủng loại" Style="{StaticResource FilterLabel}"/>
                     <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" Width="140" Height="30"/>
                 </StackPanel>
@@ -52,7 +49,7 @@
                     <ComboBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" Width="90" Height="30"/>
                 </StackPanel>
                 <StackPanel Style="{StaticResource FilterField}">
-                    <TextBlock Text="Tìm kiếm (serial, dòng hàng, người KT, ghi chú)" Style="{StaticResource FilterLabel}"/>
+                    <TextBlock Text="Tìm kiếm (serial, QR, người KT, ghi chú)" Style="{StaticResource FilterLabel}"/>
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="260" Height="30" VerticalContentAlignment="Center" Padding="6,0">
                         <TextBox.InputBindings>
                             <KeyBinding Key="Enter" Command="{Binding ApplyCommand}"/>
@@ -74,11 +71,9 @@
 
         <!-- Lưới kết quả -->
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="6" Margin="0,10,0,0">
-            <DataGrid Style="{StaticResource ResultGrid}" ItemsSource="{Binding Rows}" EnableRowVirtualization="True" EnableColumnVirtualization="False">
+            <DataGrid Style="{StaticResource ResultGrid}" ItemsSource="{Binding Rows}" EnableRowVirtualization="True" EnableColumnVirtualization="False" RowHeight="132">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="#" Binding="{Binding No}" Width="55"/>
-                    <DataGridTextColumn Header="Dòng hàng" Binding="{Binding OrderNo}" Width="1.1*"/>
-                    <DataGridTextColumn Header="Line" Binding="{Binding Line}" Width="0.7*"/>
                     <DataGridTextColumn Header="Chủng loại" Binding="{Binding Model}" Width="0.9*"/>
                     <DataGridTextColumn Header="Mã quét (Serial)" Binding="{Binding Serial}" Width="1.4*"/>
                     <DataGridTextColumn Header="Hạng mục kiểm tra" Binding="{Binding ItemName}" Width="1.1*"/>
@@ -119,6 +114,26 @@
                                         </TextBlock.Style>
                                     </TextBlock>
                                 </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="QR" Width="150" SortMemberPath="QrText" ClipboardContentBinding="{Binding QrText}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center" ToolTipService.ShowDuration="60000">
+                                    <StackPanel.ToolTip>
+                                        <ToolTip Visibility="{Binding QrText, Converter={x:Static vm:NotEmptyToVisibleConverter.Instance}}">
+                                            <StackPanel MaxWidth="360">
+                                                <TextBlock Text="QR KẾT QUẢ ĐÃ LƯU" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                                <ctrl:QrCodeControl Text="{Binding QrText}" Width="320" Height="320"/>
+                                                <TextBlock Text="{Binding QrText}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </StackPanel.ToolTip>
+                                    <ctrl:QrCodeControl Text="{Binding QrText}" Width="104" Height="104" HorizontalAlignment="Center"
+                                                        Visibility="{Binding QrText, Converter={x:Static vm:NotEmptyToVisibleConverter.Instance}}"/>
+                                    <TextBlock Text="{Binding QrText}" TextAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11" Margin="4,2"/>
+                                </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

@@ -1,10 +1,7 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.Services;
 using HeThongDoKhoangCach.ViewModels;
-using Microsoft.Win32;
 
 namespace HeThongDoKhoangCach.Views;
 
@@ -24,11 +21,26 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (!SpecGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !SpecGrid.CommitEdit(DataGridEditingUnit.Row, true)
-            || !ModelGrid.CommitEdit(DataGridEditingUnit.Cell, true) || !ModelGrid.CommitEdit(DataGridEditingUnit.Row, true)) return;
+        foreach (var (grid, section) in new[] { (TagsGrid, SettingsSection.Tags), (SpecGrid, SettingsSection.Catalog), (ModelGrid, SettingsSection.Catalog) })
+        {
+            if (grid.CommitEdit(DataGridEditingUnit.Cell, true) && grid.CommitEdit(DataGridEditingUnit.Row, true)) continue;
+            SectionTabs.SelectedIndex = (int)section;
+            return;
+        }
+        // Các trường nhập sai kiểu số có thể nằm ở mục khác với mục đang mở.
+        for (int i = 0; i < SectionTabs.Items.Count; i++)
+        {
+            var tab = (TabItem)SectionTabs.Items[i];
+            if (tab.Content is not DependencyObject content || FindInvalidInput(content) is not { } invalid) continue;
+            SectionTabs.SelectedIndex = i;
+            Dispatcher.BeginInvoke(() => { invalid.BringIntoView(); invalid.Focus(); });
+            MessageBox.Show(this, "Có giá trị nhập chưa hợp lệ. Vui lòng kiểm tra ô được đánh dấu.", "Cài đặt chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var error = _viewModel.Validate();
         if (error is not null)
         {
+            SectionTabs.SelectedIndex = (int)_viewModel.ValidationSection;
             MessageBox.Show(this, error, "Cài đặt chưa hợp lệ", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -48,18 +60,12 @@ public partial class SettingsWindow : Window
         DialogResult = false;
     }
 
-    private void BrowseMaster_Click(object sender, RoutedEventArgs e)
+    private static FrameworkElement? FindInvalidInput(DependencyObject element)
     {
-        var dialog = new OpenFileDialog
-        {
-            Title = "Chọn file master BISG",
-            Filter = "CSV (*.csv)|*.csv|Tất cả (*.*)|*.*",
-            CheckFileExists = true,
-        };
-        var current = SettingsService.ResolvePath(_viewModel.MasterFilePath);
-        if (File.Exists(current)) dialog.InitialDirectory = Path.GetDirectoryName(current);
-
-        if (dialog.ShowDialog(this) == true)
-            _viewModel.MasterFilePath = dialog.FileName;
+        if (element is FrameworkElement input && Validation.GetHasError(input)) return input;
+        foreach (var child in LogicalTreeHelper.GetChildren(element).OfType<DependencyObject>())
+            if (FindInvalidInput(child) is { } invalid) return invalid;
+        return null;
     }
+
 }

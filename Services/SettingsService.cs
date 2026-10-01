@@ -38,6 +38,7 @@ public static class SettingsService
 
         settings ??= new AppSettings();
         settings.Plc ??= new PlcSettings();
+        settings.ResultQrTemplate = ResultQrFormatter.NormalizeTemplate(settings.ResultQrTemplate);
         if (settings.HistogramBins < 4) settings.HistogramBins = 24;
         if (settings.Plc.PollIntervalMs < 50) settings.Plc.PollIntervalMs = 200;
         settings.Plc.SpecLslWrite ??= new TagDefinition { DataType = TagDataType.Float32 };

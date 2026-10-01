@@ -32,7 +32,7 @@ public sealed class HistogramGroupViewModel : ViewModelBase
 /// <summary>Chọn quy cách → model → scan serial → START → chốt kết quả và QR.</summary>
 public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 {
-    public const string AppVersion = "1.2.0";
+    public const string AppVersion = "1.2.1";
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -41,7 +41,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly DispatcherTimer _clock;
 
     private AppSettings _settings;
-    private MasterDataService _master;
     private ResultStore _store;
 
     // ----- phát hiện kết quả mới từ PLC -----
@@ -109,7 +108,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void InvalidateSerial()
     {
         _serialReady = false;
-        Serial = OrderNo = Line = QrInput = "";
+        Serial = QrInput = "";
         ClearCurrentMeasurement();
     }
     private void LoadCatalog()
@@ -140,7 +139,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public MainViewModel(AppSettings settings)
     {
         _settings = settings;
-        _master = new MasterDataService(SettingsService.ResolvePath(settings.MasterFilePath));
         _store = new ResultStore(SettingsService.ResolvePath(settings.ResultFilePath));
         TryLoadStore();
         LoadCatalog();
@@ -245,7 +243,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string DistanceText => Distance.ToString("0.00", Inv);
 
     private double? _measuredValue;
-    /// <summary>Kết quả chốt mới nhất của cuộn dây, cập nhật sau mỗi lần PLC báo đo xong.</summary>
+    /// <summary>Kết quả của lượt đo vừa hoàn tất, giữ nguyên đến lần scan hoặc RESET tiếp theo.</summary>
     public double? MeasuredValue
     {
         get => _measuredValue;
@@ -310,7 +308,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     public string MachineStateText => MachineRunning ? "ĐANG CHẠY" : "DỪNG";
 
-    // ----- Thông tin đơn hàng (từ mã QR) -----
+    // ----- Serial và thông tin đo -----
 
     private string _qrInput = "";
     public string QrInput { get => _qrInput; set => SetProperty(ref _qrInput, value); }
@@ -318,12 +316,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private string _serial = "";
     public string Serial { get => _serial; private set { if (SetProperty(ref _serial, value)) OnPropertyChanged(nameof(ScanHint)); } }
-
-    private string _orderNo = "";
-    public string OrderNo { get => _orderNo; private set => SetProperty(ref _orderNo, value); }
-
-    private string _line = "";
-    public string Line { get => _line; private set => SetProperty(ref _line, value); }
 
     private string _model = "";
     public string Model { get => _model; private set { if (SetProperty(ref _model, value)) OnPropertyChanged(nameof(ScanHint)); } }
@@ -369,7 +361,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ScanHint));
     }
 
-    /// <summary>Dòng hướng dẫn (đỏ) dưới khối thông tin đơn hàng.</summary>
+    /// <summary>Dòng hướng dẫn (đỏ) dưới khối thông tin đo.</summary>
     public string ScanHint
     {
         get
@@ -380,9 +372,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (SelectedSpec is null) return "Bước 1: Chọn quy cách đo.";
             if (SelectedModel is null) return "Bước 2: Chọn chủng loại thuộc quy cách.";
             if (_pendingRecord) return "Đang chờ bit OK/NG từ PLC.";
-            if (_measurementActive || _starting || MachineRunning) return "Đang đo liên tục – nhấn STOP khi hết cuộn dây.";
-            if (!_serialReady) return "Bước 3: Scan serial một lần cho cuộn dây cần đo.";
-            return "Nhấn START để đo liên tục với serial này.";
+            if (_measurementActive || _starting || MachineRunning) return "Đang đo – chờ kết quả từ PLC.";
+            if (!_serialReady) return "Bước 3: Scan serial cho lượt đo tiếp theo.";
+            return "Bước 4: Nhấn START để đo một lần với serial này.";
         }
     }
 
@@ -558,6 +550,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>PLC vừa có kết quả mới: chốt giá trị, phân định (nếu PLC không làm) và ghi lịch sử.</summary>
     private void OnNewResult(PlcSnapshot s)
     {
+        // Mỗi START chỉ nhận một kết quả; lượt tiếp theo phải scan lại serial.
+        _measurementActive = false;
+        _serialReady = false;
+        if (!RunningFromPlc) MachineRunning = false;
         ResultQrText = ""; // Không để QR của mẫu trước cạnh giá trị mới đang chờ OK/NG.
         if (!double.IsFinite(s.ResultValue ?? s.Distance) || !double.IsFinite(s.Force))
         {
@@ -571,7 +567,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (JudgeFromPlc) IsPass = s.JudgeNg == true ? false : s.JudgeOk == true ? true : null;
         _cycleResult = new MeasurementResult
         {
-            Serial = Serial, Model = Model, OrderNo = OrderNo, Line = Line,
+            Serial = Serial, Model = Model,
             Lsl = SelectedSpec!.Lsl, Usl = SelectedSpec.Usl,
             Inspector = _settings.Inspector, PcName = Environment.MachineName,
             Value = MeasuredValue.Value,
@@ -608,11 +604,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (_cycleResult is null) return;
         _cycleResult.IsOk = ok;
         _completedResult = _cycleResult;
-        _unsavedResults.Enqueue(_completedResult);
         _cycleResult = null;
         var qr = ResultQrFormatter.Format(_settings.ResultQrTemplate, _completedResult);
         bool qrTooLong = System.Text.Encoding.UTF8.GetByteCount(qr) > 1500;
         ResultQrText = qrTooLong ? "" : qr;
+        _completedResult.QrText = ResultQrText;
+        _unsavedResults.Enqueue(_completedResult);
         _pendingRecord = false;
         if (_settings.AutoSaveOnMeasureDone) SaveCurrent();
         else StatusMessage = (ok ? "Kết quả: PASS" : "Kết quả: NG") + " – nhấn LƯU DỮ LIỆU để ghi lịch sử";
@@ -642,11 +639,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             StatusMessage = "Serial không hợp lệ (tối đa 256 ký tự, không chứa ký tự điều khiển).";
             return Task.CompletedTask;
         }
-        var info = _master.Lookup(serial);
         ClearCurrentMeasurement();
         Serial = serial;
-        OrderNo = info?.OrderNo ?? "";
-        Line = info?.Line ?? "";
         QrInput = "";
         _serialReady = true;
         StatusMessage = $"Đã nhận serial {Serial} – {Model}, {SpecText}. Nhấn START.";
@@ -716,7 +710,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _measurementActive = true;
             await _monitor.WriteCommandAsync(P.StartCommand, true);
             if (!RunningFromPlc) MachineRunning = true;
-            StatusMessage = $"Đã gửi START ({P.StartCommand.Address}) – đo liên tục với serial {Serial} đến khi STOP";
+            StatusMessage = $"Đã gửi START ({P.StartCommand.Address}) – đo một lần với serial {Serial}";
         }
         catch
         {
@@ -827,7 +821,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _settings = settings;
         SettingsService.Save(settings);
 
-        _master = new MasterDataService(SettingsService.ResolvePath(settings.MasterFilePath));
 
         var resultPath = SettingsService.ResolvePath(settings.ResultFilePath);
         if (!string.Equals(resultPath, _store.FilePath, StringComparison.OrdinalIgnoreCase))

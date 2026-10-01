@@ -8,6 +8,8 @@ using HeThongDoKhoangCach.Services.Plc;
 
 namespace HeThongDoKhoangCach.ViewModels;
 
+public enum SettingsSection { Connection, Tags, Catalog, Qr, General }
+
 /// <summary>Một dòng trong bảng địa chỉ PLC của màn hình cài đặt.</summary>
 public sealed class TagRow : ViewModelBase
 {
@@ -175,16 +177,18 @@ public sealed class SettingsViewModel : ViewModelBase
     public string CompanyLabel { get => _draft.CompanyLabel; set { _draft.CompanyLabel = value; OnPropertyChanged(); } }
     public string Inspector { get => _draft.Inspector; set { _draft.Inspector = value; OnPropertyChanged(); } }
     public string ForceUnit { get => _draft.ForceUnit; set { _draft.ForceUnit = value; OnPropertyChanged(); } }
-    public string MasterFilePath { get => _draft.MasterFilePath; set { _draft.MasterFilePath = value; OnPropertyChanged(); } }
     public string ResultFilePath { get => _draft.ResultFilePath; set { _draft.ResultFilePath = value; OnPropertyChanged(); } }
     public bool AutoSaveOnMeasureDone { get => _draft.AutoSaveOnMeasureDone; set { _draft.AutoSaveOnMeasureDone = value; OnPropertyChanged(); } }
     public int HistogramBins { get => _draft.HistogramBins; set { _draft.HistogramBins = value; OnPropertyChanged(); } }
 
     // ----- Kiểm tra & kết xuất -----
 
+    public SettingsSection ValidationSection { get; private set; }
+
     /// <summary>Trả về thông báo lỗi đầu tiên, hoặc null nếu hợp lệ.</summary>
     public string? Validate()
     {
+        ValidationSection = SettingsSection.Connection;
         if (IsNetworkProtocol)
         {
             if (!IPAddress.TryParse(IpAddress.Trim(), out _) && Uri.CheckHostName(IpAddress.Trim()) == UriHostNameType.Unknown)
@@ -194,6 +198,7 @@ public sealed class SettingsViewModel : ViewModelBase
         if (PollIntervalMs < 50) return "Chu kỳ đọc tối thiểu 50 ms.";
         if (TimeoutMs < 200) return "Timeout tối thiểu 200 ms.";
 
+        ValidationSection = SettingsSection.Tags;
         foreach (var row in Tags)
         {
             bool hasAddress = !string.IsNullOrWhiteSpace(row.Address);
@@ -212,6 +217,7 @@ public sealed class SettingsViewModel : ViewModelBase
             }
         }
 
+        ValidationSection = SettingsSection.Catalog;
         var catalogError = SpecDatabase.Validate(Specs.ToList());
         if (catalogError is not null) return catalogError;
         foreach (var model in Specs.SelectMany(s => s.Models).Where(m => m.HasPlcBit))
@@ -220,13 +226,14 @@ public sealed class SettingsViewModel : ViewModelBase
             var err = ValidateAddress(model.PlcBit, mustBeBit: true);
             if (err is not null) return $"Bit của model '{model.Name}': {err}";
         }
+        ValidationSection = SettingsSection.Qr;
         if (ResultQrTemplate.Length > 512) return "Mẫu QR tối đa 512 ký tự.";
         var unknown = System.Text.RegularExpressions.Regex.Matches(ResultQrTemplate, @"\{(\w+)\}")
             .Select(m => m.Groups[1].Value).FirstOrDefault(f => !ResultQrFormatter.Fields.Contains(f, StringComparer.OrdinalIgnoreCase));
         if (unknown is not null) return $"Trường QR không hợp lệ: {{{unknown}}}.";
 
+        ValidationSection = SettingsSection.General;
         if (HistogramBins is < 4 or > 100) return "Số cột histogram phải trong 4..100.";
-        if (string.IsNullOrWhiteSpace(MasterFilePath)) return "Chưa chọn file master.";
         if (string.IsNullOrWhiteSpace(ResultFilePath)) return "Chưa đặt đường dẫn file kết quả.";
         return null;
     }
@@ -261,7 +268,6 @@ public sealed class SettingsViewModel : ViewModelBase
         ApplyTagsTo(_draft.Plc);
         _draft.Plc.IpAddress = _draft.Plc.IpAddress.Trim();
         new SpecDatabase(SettingsService.ResolvePath(_draft.DatabaseFilePath)).Save(Specs.ToList());
-        _draft.MasterFilePath = _draft.MasterFilePath.Trim();
         _draft.ResultFilePath = _draft.ResultFilePath.Trim();
         return _draft;
     }

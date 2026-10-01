@@ -167,8 +167,6 @@ public class AppSettings
 
     /// <summary>Database SQLite chứa bảng quy cách – model (chọn ở Bước 1, Bước 2 trên màn hình chính).</summary>
     public string DatabaseFilePath { get; set; } = @"Data\HeThongDo.db";
-    /// <summary>File master của BISG: Key(serial hoặc tiền tố serial),OrderNo,Line,Model – tra đơn hàng/line theo serial vừa scan.</summary>
-    public string MasterFilePath { get; set; } = @"Data\master.csv";
     /// <summary>File lưu lịch sử kết quả (JSON Lines, mỗi dòng một kết quả).</summary>
     public string ResultFilePath { get; set; } = @"Data\results.jsonl";
 

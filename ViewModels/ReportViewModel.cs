@@ -5,7 +5,7 @@ using HeThongDoKhoangCach.Services;
 
 namespace HeThongDoKhoangCach.ViewModels;
 
-/// <summary>Màn "Giao diện báo cáo": lưới kết quả có bộ lọc theo ngày, line, chủng loại, kết quả, từ khóa; xuất Excel.</summary>
+/// <summary>Màn báo cáo: lọc theo ngày, chủng loại, kết quả, từ khóa; xuất Excel.</summary>
 public sealed class ReportViewModel : ViewModelBase
 {
     public const string AllOption = "Tất cả";
@@ -16,7 +16,6 @@ public sealed class ReportViewModel : ViewModelBase
     {
         _all = all;
 
-        Lines = [AllOption, .. Distinct(all.Select(r => r.Line))];
         Models = [AllOption, .. Distinct(all.Select(r => r.Model))];
         Results = [AllOption, "OK", "NG"];
 
@@ -33,7 +32,6 @@ public sealed class ReportViewModel : ViewModelBase
     public Func<string, string?>? ChooseExportPath { get; set; }
     public Action<string, bool>? ShowMessage { get; set; }
 
-    public IReadOnlyList<string> Lines { get; }
     public IReadOnlyList<string> Models { get; }
     public IReadOnlyList<string> Results { get; }
 
@@ -48,9 +46,6 @@ public sealed class ReportViewModel : ViewModelBase
 
     private DateTime? _toDate;
     public DateTime? ToDate { get => _toDate; set => SetProperty(ref _toDate, value); }
-
-    private string _selectedLine = AllOption;
-    public string SelectedLine { get => _selectedLine; set => SetProperty(ref _selectedLine, value); }
 
     private string _selectedModel = AllOption;
     public string SelectedModel { get => _selectedModel; set => SetProperty(ref _selectedModel, value); }
@@ -69,7 +64,6 @@ public sealed class ReportViewModel : ViewModelBase
         IEnumerable<MeasurementResult> q = _all;
         if (FromDate is { } from) q = q.Where(r => r.InspectedAt >= from.Date);
         if (ToDate is { } to) q = q.Where(r => r.InspectedAt < to.Date.AddDays(1));
-        if (SelectedLine != AllOption) q = q.Where(r => string.Equals(r.Line.Trim(), SelectedLine, StringComparison.OrdinalIgnoreCase));
         if (SelectedModel != AllOption) q = q.Where(r => string.Equals(r.Model.Trim(), SelectedModel, StringComparison.OrdinalIgnoreCase));
         if (SelectedResult == "OK") q = q.Where(r => r.IsOk);
         else if (SelectedResult == "NG") q = q.Where(r => !r.IsOk);
@@ -78,8 +72,8 @@ public sealed class ReportViewModel : ViewModelBase
         if (s.Length > 0)
         {
             q = q.Where(r => r.Serial.Contains(s, StringComparison.OrdinalIgnoreCase)
-                          || r.OrderNo.Contains(s, StringComparison.OrdinalIgnoreCase)
                           || r.Inspector.Contains(s, StringComparison.OrdinalIgnoreCase)
+                          || (r.QrText ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)
                           || r.Note.Contains(s, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -96,7 +90,7 @@ public sealed class ReportViewModel : ViewModelBase
     {
         FromDate = _all.Count == 0 ? DateTime.Today.AddDays(-30) : _all.Min(r => r.InspectedAt).Date;
         ToDate = DateTime.Today;
-        SelectedLine = SelectedModel = SelectedResult = AllOption;
+        SelectedModel = SelectedResult = AllOption;
         SearchText = "";
         Apply();
     }

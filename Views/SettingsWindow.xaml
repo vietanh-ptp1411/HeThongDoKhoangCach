@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:HeThongDoKhoangCach.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
-        Title="Cài đặt hệ thống" Width="1000" Height="820" MinWidth="820" MinHeight="600"
+        Title="Cài đặt hệ thống" Width="1140" Height="760" MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{StaticResource BgBrush}" FontFamily="Segoe UI" FontSize="13">
 
@@ -29,26 +29,62 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,6,0,0"/>
         </Style>
+        <Style x:Key="SectionItem" TargetType="TabItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="ItemBorder" Background="Transparent" BorderBrush="Transparent" BorderThickness="3,0,0,0" CornerRadius="5" Padding="12,14">
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource FieldBgBrush}"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
-            <StackPanel>
-
-                <!-- ===== Kết nối PLC ===== -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,18">
+            <TextBlock Text="CÀI ĐẶT HỆ THỐNG" FontSize="22" FontWeight="Bold" Foreground="{StaticResource ValueBrush}"/>
+            <TextBlock Text="Chọn mục bên trái để mở nhanh phần cần chỉnh." Style="{StaticResource Hint}"/>
+        </StackPanel>
+        <TabControl x:Name="SectionTabs" Grid.Row="1" TabStripPlacement="Left" SelectedIndex="0" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource SectionItem}">
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="204"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Background="White" CornerRadius="6" Padding="8" Margin="0,0,16,0" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.TabNavigation="Once"/>
+                        </Border>
+                        <ContentPresenter Grid.Column="1" x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+                    </Grid>
+                </ControlTemplate>
+            </TabControl.Template>
+            <TabItem AutomationProperties.Name="Kết nối PLC">
+                <TabItem.Header><StackPanel><TextBlock Text="Kết nối PLC" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="IP, giao thức, chu kỳ đọc" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Kết nối PLC" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Thiết lập kết nối và kiểm tra tín hiệu từ PLC." Style="{StaticResource Hint}"/></StackPanel>
+                    <Grid Grid.Row="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><Border Style="{StaticResource Card}" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="KẾT NỐI PLC"/>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="THÔNG SỐ KẾT NỐI"/>
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="135"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="135"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -82,17 +118,23 @@
                                     Height="30" HorizontalAlignment="Left" Margin="0,4" Command="{Binding TestConnectionCommand}"/>
 
                             <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,6,0,0" IsChecked="{Binding AutoConnectPlc}"
-                                      Content="Tự động kết nối PLC khi mở phần mềm (vẫn có nút KẾT NỐI PLC / NGẮT KẾT NỐI ở thanh trạng thái)"/>
+                                      Content="Tự động kết nối PLC khi mở phần mềm"/>
 
                             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="4" Text="{Binding TestResult}" TextWrapping="Wrap"
                                        Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
                         </Grid>
                     </StackPanel>
-                </Border>
-
-                <!-- ===== Bảng địa chỉ ===== -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                    <StackPanel>
+                </Border></ScrollViewer></Grid>
+                </Grid>
+            </TabItem>
+            <TabItem AutomationProperties.Name="Địa chỉ PLC">
+                <TabItem.Header><StackPanel><TextBlock Text="Địa chỉ PLC" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Tag, kiểu dữ liệu, hệ số" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Địa chỉ PLC" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Bảng tín hiệu trao đổi giữa phần mềm và PLC." Style="{StaticResource Hint}"/></StackPanel>
+                    <Grid Grid.Row="1"><Border Style="{StaticResource Card}" Margin="0">
+                    <Grid>
+<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <Button Content="Mặc định MC" Style="{StaticResource SmallButton}" Command="{Binding UseMcDefaultsCommand}" Margin="0,0,8,0"/>
@@ -100,78 +142,122 @@
                             </StackPanel>
                             <TextBlock Style="{StaticResource CardTitle}" Text="BẢNG ĐỊA CHỈ PLC (TAGS)" VerticalAlignment="Center"/>
                         </DockPanel>
-                        <TextBlock Style="{StaticResource Hint}"
-                                   Text="Phần mềm GHI: START (M0) / STOP (M15) / RESET và bit chủng loại (bảng bên dưới, M40..M50). Phần mềm ĐỌC liên tục: lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm, bit trạng thái. ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (tự so quy cách để ra OK/NG, tự đếm theo lịch sử). Kết quả mới được nhận biết theo sườn lên bit 'Đo xong'; nếu để trống thì theo bộ đếm TOTAL tăng, nếu cũng trống thì theo giá trị 'Kết quả đo' thay đổi. Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/>
-                        <DataGrid Style="{StaticResource EditGrid}" ItemsSource="{Binding Tags}" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,10,0,0">
+                        <TextBlock Grid.Row="1" Style="{StaticResource Hint}" Text="Chỉnh địa chỉ, kiểu dữ liệu và hệ số cho từng tín hiệu. Dấu * là trường bắt buộc."/>
+                        <DataGrid x:Name="TagsGrid" Grid.Row="2" Style="{StaticResource EditGrid}" ItemsSource="{Binding Tags}" CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,10,0,0">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Nhóm" Binding="{Binding Group}" IsReadOnly="True" Width="90"/>
-                                <DataGridTextColumn Header="Tag" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*"/>
-                                <DataGridTextColumn Header="Địa chỉ" Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
-                                <DataGridComboBoxColumn Header="Kiểu dữ liệu" Width="105"
+                                <DataGridTextColumn Header="Nhóm" Binding="{Binding Group}" IsReadOnly="True" Width="85"/>
+                                <DataGridTextColumn Header="Tag" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" MinWidth="150"/>
+                                <DataGridTextColumn Header="Địa chỉ" Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+                                <DataGridComboBoxColumn Header="Kiểu dữ liệu" Width="100"
                                                         ItemsSource="{x:Static vm:SettingsViewModel.DataTypes}"
                                                         SelectedItemBinding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}"/>
-                                <DataGridTextColumn Header="Hệ số" Binding="{Binding Scale, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
-                                <DataGridComboBoxColumn Header="Thứ tự word" Width="105"
+                                <DataGridTextColumn Header="Hệ số" Binding="{Binding Scale, UpdateSourceTrigger=PropertyChanged}" Width="65"/>
+                                <DataGridComboBoxColumn Header="Thứ tự word" Width="100"
                                                         ItemsSource="{x:Static vm:SettingsViewModel.WordOrders}"
                                                         SelectedItemBinding="{Binding WordOrder, UpdateSourceTrigger=PropertyChanged}"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                    </StackPanel>
+                    <Expander Grid.Row="3" Header="Hướng dẫn địa chỉ và cách nhận kết quả" Margin="0,12,0,0">
+<ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="130"><TextBlock Style="{StaticResource Hint}"
+                                   Text="Phần mềm GHI: START (M0) / STOP (M15) / RESET và bit chủng loại (bảng bên dưới, M40..M50). Phần mềm ĐỌC liên tục: lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm, bit trạng thái. ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (tự so quy cách để ra OK/NG, tự đếm theo lịch sử). Kết quả mới được nhận biết theo sườn lên bit 'Đo xong'; nếu để trống thì theo bộ đếm TOTAL tăng, nếu cũng trống thì theo giá trị 'Kết quả đo' thay đổi. Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/></ScrollViewer>
+</Expander>
+</Grid>
+                </Border></Grid>
+                </Grid>
+            </TabItem>
+            <TabItem AutomationProperties.Name="Quy cách &amp; model">
+                <TabItem.Header><StackPanel><TextBlock Text="Quy cách &amp; model" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Giới hạn đo, bit model" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Quy cách &amp; model" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Chọn quy cách bên trái để chỉnh danh sách model bên phải." Style="{StaticResource Hint}"/></StackPanel>
+                    <Grid Grid.Row="1"><Grid>
+    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Style="{StaticResource Card}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBlock Text="1. QUY CÁCH ĐO" Style="{StaticResource CardTitle}"/>
+            <TextBlock Grid.Row="1" Text="Chọn dòng để xem các model tương ứng." Style="{StaticResource Hint}" Margin="0,6,0,12"/>
+            <DataGrid Grid.Row="2" x:Name="SpecGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding Specs}" SelectedItem="{Binding SelectedSpec}" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="40"/>
+                    <DataGridTextColumn Header="LSL (mm)" Binding="{Binding Lsl}" Width="75"/>
+                    <DataGridTextColumn Header="USL (mm)" Binding="{Binding Usl}" Width="75"/>
+                    <DataGridTextColumn Header="Điều kiện" Binding="{Binding Condition}" Width="*" MinWidth="100"/>
+                </DataGrid.Columns>
+            </DataGrid>
+            <WrapPanel Grid.Row="3" Margin="0,12,0,0">
+                <Button Content="Thêm quy cách" Command="{Binding AddSpecCommand}" Style="{StaticResource SmallButton}" Margin="0,0,6,4"/>
+                <Button Content="Xóa" Command="{Binding RemoveSpecCommand}" Style="{StaticResource SmallButton}" Margin="0,0,0,4"/>
+            </WrapPanel>
+        </Grid>
+    </Border>
+    <Border Grid.Column="2" Style="{StaticResource Card}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBlock Text="2. MODEL THUỘC QUY CÁCH" Style="{StaticResource CardTitle}"/>
+            <TextBlock Grid.Row="1" Text="Model và bit PLC của dòng đang chọn." Style="{StaticResource Hint}" Margin="0,6,0,12"/>
+            <DataGrid Grid.Row="2" x:Name="ModelGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding SelectedSpec.Models}" SelectedItem="{Binding SelectedModel}" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="40"/>
+                    <DataGridTextColumn Header="Model" Binding="{Binding Name}" Width="*" MinWidth="80"/>
+                    <DataGridTextColumn Header="Bit PLC" Binding="{Binding PlcBit}" Width="100"/>
+                </DataGrid.Columns>
+            </DataGrid>
+            <WrapPanel Grid.Row="3" Margin="0,12,0,0">
+                <Button Content="Thêm model" Command="{Binding AddModelCommand}" Style="{StaticResource SmallButton}" Margin="0,0,6,4"/>
+                <Button Content="Xóa" Command="{Binding RemoveModelCommand}" Style="{StaticResource SmallButton}" Margin="0,0,0,4"/>
+            </WrapPanel>
+        </Grid>
+    </Border>
+    <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding DatabaseFilePath, StringFormat=Database: {0}}" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DatabaseFilePath}"/>
+</Grid></Grid>
+                </Grid>
+            </TabItem>
+            <TabItem AutomationProperties.Name="QR kết quả">
+                <TabItem.Header><StackPanel><TextBlock Text="QR kết quả" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Mẫu nội dung, xem trước" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="QR kết quả" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Cấu hình thông tin mà máy quét sẽ đọc từ mã QR." Style="{StaticResource Hint}"/></StackPanel>
+                    <Grid Grid.Row="1"><ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel>
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="NỘI DUNG MÃ QR" Style="{StaticResource CardTitle}"/>
+                <TextBlock Style="{StaticResource Hint}" Text="Mặc định {Value} tạo mã chứa giá trị đo, ví dụ 3.70. Ghép thêm các trường nếu hệ thống nhận yêu cầu."/>
+                <TextBlock Text="Mẫu nội dung" Style="{StaticResource Label}" Margin="0,16,0,2"/>
+                <TextBox Style="{StaticResource InputBox}" Text="{Binding ResultQrTemplate, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" Height="36"/>
+                <TextBlock Text="Các trường có thể dùng" Style="{StaticResource Label}" Margin="0,14,0,6"/>
+                <Border Background="{StaticResource FieldBgBrush}" CornerRadius="5" Padding="12">
+                    <TextBlock Text="{Binding QrFields}" TextWrapping="Wrap" FontFamily="Consolas" LineHeight="24"/>
                 </Border>
-
-                <!-- ===== Chủng loại: quy cách + bit PLC ===== -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            </StackPanel>
+        </Border>
+        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+            <StackPanel>
+                <TextBlock Text="XEM TRƯỚC NỘI DUNG" Style="{StaticResource CardTitle}"/>
+                <TextBlock Text="Ví dụ với kết quả 3.70 mm, model CPX và phân định OK." Style="{StaticResource Hint}"/>
+                <TextBlock Text="{Binding QrPreview}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" Margin="0,14,0,4"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</ScrollViewer></Grid>
+                </Grid>
+            </TabItem>
+            <TabItem AutomationProperties.Name="Thông tin &amp; dữ liệu">
+                <TabItem.Header><StackPanel><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Người KT, file lưu, biểu đồ" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Thông tin hiển thị, đường dẫn dữ liệu và chế độ lưu." Style="{StaticResource Hint}"/></StackPanel>
+                    <Grid Grid.Row="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="DANH MỤC QUY CÁCH – MODEL"/>
-                        <TextBlock Style="{StaticResource Hint}" Text="Chọn một quy cách để sửa các model thuộc quy cách đó. Dữ liệu được lưu vào database khi bấm Lưu &amp; áp dụng."/>
-                        <TextBlock Text="{Binding DatabaseFilePath}" Margin="0,6"/>
-                        <DataGrid x:Name="SpecGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding Specs}" SelectedItem="{Binding SelectedSpec}" Height="150" CanUserAddRows="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="50"/>
-                                <DataGridTextColumn Header="LSL (mm)" Binding="{Binding Lsl}" Width="100"/>
-                                <DataGridTextColumn Header="USL (mm)" Binding="{Binding Usl}" Width="100"/>
-                                <DataGridTextColumn Header="Điều kiện" Binding="{Binding Condition}" Width="*"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                        <StackPanel Orientation="Horizontal" Margin="0,6">
-                            <Button Content="Thêm quy cách" Command="{Binding AddSpecCommand}" Style="{StaticResource SmallButton}"/>
-                            <Button Content="Xóa quy cách" Command="{Binding RemoveSpecCommand}" Style="{StaticResource SmallButton}" Margin="8,0"/>
-                        </StackPanel>
-                        <DataGrid x:Name="ModelGrid" Style="{StaticResource EditGrid}" ItemsSource="{Binding SelectedSpec.Models}" SelectedItem="{Binding SelectedModel}" Height="170" CanUserAddRows="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="No" Binding="{Binding SortOrder}" Width="50"/>
-                                <DataGridTextColumn Header="Model" Binding="{Binding Name}" Width="*"/>
-                                <DataGridTextColumn Header="Bit PLC (M / C)" Binding="{Binding PlcBit}" Width="180"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                        <StackPanel Orientation="Horizontal" Margin="0,6">
-                            <Button Content="Thêm model" Command="{Binding AddModelCommand}" Style="{StaticResource SmallButton}"/>
-                            <Button Content="Xóa model" Command="{Binding RemoveModelCommand}" Style="{StaticResource SmallButton}" Margin="8,0"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="MÃ QR KẾT QUẢ ĐO"/>
-                        <TextBlock Style="{StaticResource Hint}" Text="Mặc định mã QR chứa giá trị đo, ví dụ 3.70. Có thể ghép thêm serial, model và phân định theo định dạng phía nhận yêu cầu."/>
-                        <TextBlock Text="{Binding QrFields}" TextWrapping="Wrap" Margin="0,8"/>
-                        <TextBox Style="{StaticResource InputBox}" Text="{Binding ResultQrTemplate, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Text="{Binding QrPreview}" TextWrapping="Wrap" Margin="0,8"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- ===== Khác ===== -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource CardTitle}" Text="THÔNG TIN CHUNG &amp; DỮ LIỆU"/>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="THÔNG TIN HIỂN THỊ VÀ LƯU TRỮ"/>
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="175"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -182,40 +268,42 @@
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Label}" Text="Tiêu đề hệ thống"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding Title}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding Title}"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Label}" Text="Nhãn đơn vị / công ty"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding CompanyLabel}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding CompanyLabel}"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Label}" Text="Mã người kiểm tra"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding Inspector}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding Inspector}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Label}" Text="Đơn vị lực căng"/>
-                            <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding ForceUnit}"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ForceUnit}"/>
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Label}" Text="File master BISG (CSV)"/>
-                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding MasterFilePath}"/>
-                            <Button Grid.Row="4" Grid.Column="2" Content="Chọn..." Style="{StaticResource SmallButton}" Margin="8,4,0,4" Click="BrowseMaster_Click"/>
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
-                            <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
-                            <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
 
-                            <CheckBox Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
-                                      Content="Tự động lưu kết quả ngay khi PLC gửi kết quả mới và đã có PASS/NG (tắt nếu muốn bấm LƯU DỮ LIỆU thủ công)"/>
+                            <CheckBox Grid.Row="6" Grid.Column="1"  Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
+                                      Content="Tự động lưu khi có kết quả và PASS/NG"/>
                         </Grid>
                         <TextBlock Style="{StaticResource Hint}"
-                                   Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. File master gồm các cột: Key, OrderNo, Line, Model – Key là serial đầy đủ hoặc tiền tố serial (phần trước dấu gạch ngang); dùng để bổ sung đơn hàng và line theo serial. Quy cách và model do người vận hành chọn."/>
+                                   Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. Kết quả được lưu theo serial, model và quy cách đã chọn; không cần file tra cứu bên ngoài."/>
                     </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Lưu &amp; áp dụng" Style="{StaticResource PrimaryButton}" Width="150" Click="Save_Click" Margin="0,0,10,0"/>
-            <Button Content="Hủy" Style="{StaticResource SmallButton}" Width="110" Height="38" FontSize="14" Click="Cancel_Click"/>
-        </StackPanel>
+                </Border></ScrollViewer></Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <Border Grid.Row="2" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Padding="0,12,0,0" Margin="0,16,0,0">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Lưu &amp; áp dụng" Style="{StaticResource PrimaryButton}" Width="150" Click="Save_Click" Margin="0,0,10,0"/>
+                    <Button Content="Hủy" Style="{StaticResource SmallButton}" Width="100" Height="36" FontSize="13" Click="Cancel_Click"/>
+                </StackPanel>
+                <TextBlock Text="Lưu thay đổi của tất cả các mục." Style="{StaticResource Label}"/>
+            </DockPanel>
+        </Border>
     </Grid>
 </Window>
