@@ -1,6 +1,6 @@
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent
-payload=root/'artifacts/publish/1.2.1/win-x64'
+payload=root/'artifacts/publish/BeltTensionMeasurement/1.2.1/win-x64'
 files=sorted(p for p in payload.rglob('*') if p.is_file() and p.relative_to(payload).parts[0]!='Data' and p.name!='appsettings.json')
 def nsis(s):return str(s).replace('$','$$').replace('"','$\\"')
 lines=['!macro InstallPayload']

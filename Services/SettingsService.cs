@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services;
+namespace BeltTensionMeasurement.Services;
 
 /// <summary>Đọc/ghi appsettings.json cạnh file exe.</summary>
 public static class SettingsService
@@ -27,7 +27,9 @@ public static class SettingsService
         {
             try
             {
-                settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath, Encoding.UTF8), JsonOptions);
+                var json = File.ReadAllText(FilePath, Encoding.UTF8);
+                settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+
             }
             catch (JsonException)
             {
@@ -38,6 +40,7 @@ public static class SettingsService
 
         settings ??= new AppSettings();
         settings.Plc ??= new PlcSettings();
+        settings.Plc.PurposeWrite ??= new TagDefinition { DataType = TagDataType.Int16 };
         settings.ResultQrTemplate = ResultQrFormatter.NormalizeTemplate(settings.ResultQrTemplate);
         if (settings.HistogramBins < 4) settings.HistogramBins = 24;
         if (settings.Plc.PollIntervalMs < 50) settings.Plc.PollIntervalMs = 200;

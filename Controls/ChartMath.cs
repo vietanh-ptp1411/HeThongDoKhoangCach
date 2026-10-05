@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 
-namespace HeThongDoKhoangCach.Controls;
+namespace BeltTensionMeasurement.Controls;
 
 /// <summary>Hàm dùng chung cho các control vẽ biểu đồ.</summary>
 internal static class ChartMath

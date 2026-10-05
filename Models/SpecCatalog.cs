@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Collections.ObjectModel;
 
-namespace HeThongDoKhoangCach.Models;
+namespace BeltTensionMeasurement.Models;
 
 /// <summary>
 /// Một quy cách trong database – một dòng của "Bảng Điều kiện và Quy cách đo lực căng dây curoa motor":

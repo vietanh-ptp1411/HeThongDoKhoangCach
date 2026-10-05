@@ -1,10 +1,10 @@
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>
 /// PLC mô phỏng theo luồng vận hành của khách hàng:
-/// phần mềm bật bit START (máy chạy) / STOP (tạm dừng) / RESET (xóa giá trị) và bật bit chủng loại (M40..M50) khi chọn model;
+/// người vận hành bấm START trên App; PC ghi model, quy cách rồi StartCommand để máy chạy;
 /// mỗi START đo một lần trong 1,5 giây, ghi kết quả đo, phân định OK/NG,
 /// tăng bộ đếm rồi bật bit Đo xong (giữ 0,6 giây), dừng và chờ START tiếp theo.
 /// Lực căng và khoảng cách được cập nhật liên tục ở mỗi lần đọc.
@@ -114,7 +114,14 @@ public sealed class SimulationPlcClient : IPlcClient
 
             if (Same(address, _s.StartCommand.Address))
             {
-                _running = true;
+                if (!_running && TryResolveSpec())
+                {
+                    _running = true;
+                    _phase = Phase.Idle;
+                    SetBit(_s.MeasureDone.Address, false);
+                    SetBit(_s.JudgeOk.Address, false);
+                    SetBit(_s.JudgeNg.Address, false);
+                }
                 SetBit(address, false);          // PLC tự xóa bit lệnh
             }
             else if (Same(address, _s.StopCommand.Address))

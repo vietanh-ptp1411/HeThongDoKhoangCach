@@ -2,7 +2,12 @@
 
 Bản giao khách nằm trong `artifacts/release/1.2.1`. Bộ cài NSIS chứa ứng dụng self-contained `win-x64`,
 runtime .NET và hướng dẫn PDF/Word. Cài theo tài khoản Windows tại
-`%LOCALAPPDATA%\Programs\HeThongDoKhoangCach`, không yêu cầu quyền quản trị.
+`%LOCALAPPDATA%\Programs\BeltTensionMeasurement`, không yêu cầu quyền quản trị.
+
+Project và file chạy hiện mang tên `BeltTensionMeasurement`. Bộ cài giữ khóa đăng ký `MVALab\BeltMeasurement`
+để nhận diện bản đã cài: khi nâng cấp sẽ dùng lại thư mục của bản cũ, kể cả thư mục mang tên
+`HeThongDoKhoangCach`, nhằm giữ cấu hình và dữ liệu. Sau khi kiểm tra bản cũ đã đóng, bộ cài gỡ các binary
+mang tên cũ và thay bằng tên mới; không xóa `appsettings.json` hay `Data`.
 
 ## Công cụ
 

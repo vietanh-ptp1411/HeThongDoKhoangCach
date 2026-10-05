@@ -1,7 +1,7 @@
 ﻿param([string]$InstallerPath = '', [string]$PreviousInstallerPath = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-if (!$InstallerPath) { $InstallerPath = Join-Path $projectRoot 'artifacts\release\1.2.1\HeThongDoLucCangBelt-Setup-1.2.1-win-x64.exe' }
+if (!$InstallerPath) { $InstallerPath = Join-Path $projectRoot 'artifacts\release\1.2.1\BeltTensionMeasurement-Setup-1.2.1-win-x64.exe' }
 $testDirectory = Join-Path $projectRoot ('artifacts\qa\installed-' + [Guid]::NewGuid().ToString('N'))
 $registryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MVALabBeltMeasurement'
 if (Test-Path $registryPath) { throw 'An installed copy is already registered. Do not replace it during installer QA.' }
@@ -20,7 +20,7 @@ function Install-TestCopy([string]$PackagePath = $InstallerPath) {
 }
 
 Install-TestCopy
-Assert-Check (Test-Path (Join-Path $testDirectory 'HeThongDoKhoangCach.exe')) 'Application executable is installed'
+Assert-Check (Test-Path (Join-Path $testDirectory 'BeltTensionMeasurement.exe')) 'Application executable is installed'
 Assert-Check (Test-Path (Join-Path $testDirectory 'coreclr.dll')) 'Self-contained .NET runtime is installed'
 Assert-Check (Test-Path (Join-Path $testDirectory 'e_sqlite3.dll')) 'Native SQLite library is installed'
 Assert-Check (Test-Path (Join-Path $testDirectory 'HuongDan\HuongDanSuDung.pdf')) 'PDF guide is installed'
@@ -29,7 +29,7 @@ Assert-Check (!(Test-Path (Join-Path $testDirectory 'Data\master.csv'))) 'Fresh 
 Assert-Check (Test-Path $registryPath) 'Windows uninstall entry is registered'
 Assert-Check ((Test-Path -LiteralPath $desktopShortcut) -and (Test-Path -LiteralPath $startMenuFolder)) 'Desktop and Start Menu shortcuts exist'
 
-$app = Start-Process -FilePath (Join-Path $testDirectory 'HeThongDoKhoangCach.exe') -WorkingDirectory $testDirectory -WindowStyle Hidden -PassThru
+$app = Start-Process -FilePath (Join-Path $testDirectory 'BeltTensionMeasurement.exe') -WorkingDirectory $testDirectory -WindowStyle Hidden -PassThru
 try {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $database = Join-Path $testDirectory 'Data\HeThongDo.db'
@@ -71,7 +71,7 @@ $uninstaller = Join-Path $testDirectory 'Uninstall.exe'
 # _?= runs uninstall from the original location and makes the exit code observable.
 $remove = Start-Process -FilePath $uninstaller -ArgumentList @('/S', ('_?=' + $testDirectory)) -WindowStyle Hidden -Wait -PassThru
 Assert-Check ($remove.ExitCode -eq 0) 'Uninstaller exits successfully'
-Assert-Check (!(Test-Path (Join-Path $testDirectory 'HeThongDoKhoangCach.exe'))) 'Uninstaller removes application binaries'
+Assert-Check (!(Test-Path (Join-Path $testDirectory 'BeltTensionMeasurement.exe'))) 'Uninstaller removes application binaries'
 Assert-Check (!(Test-Path $registryPath)) 'Uninstaller removes Windows app registration'
 Assert-Check (!(Test-Path -LiteralPath $desktopShortcut) -and !(Test-Path -LiteralPath $startMenuFolder)) 'Uninstaller removes shortcuts'
 foreach ($file in $userFiles) { Assert-Check ((Get-FileHash -LiteralPath $file).Hash -eq $hashesBefore[$file]) ('Uninstall preserves ' + [IO.Path]::GetFileName($file)) }

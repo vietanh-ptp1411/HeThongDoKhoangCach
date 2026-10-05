@@ -2,9 +2,9 @@ using System.IO;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services;
+namespace BeltTensionMeasurement.Services;
 
 /// <summary>Lưu kết quả đo dạng JSON Lines (mỗi dòng một bản ghi, chỉ ghi thêm – an toàn khi mất điện).</summary>
 public sealed class ResultStore

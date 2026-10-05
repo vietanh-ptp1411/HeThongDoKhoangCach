@@ -1,7 +1,7 @@
 using System.IO;
 using System.Net.Sockets;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>
 /// Lớp nền cho các client PLC chạy trên TCP: quản lý socket, timeout,

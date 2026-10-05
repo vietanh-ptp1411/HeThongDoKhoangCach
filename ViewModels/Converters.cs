@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace HeThongDoKhoangCach.ViewModels;
+namespace BeltTensionMeasurement.ViewModels;
 
 /// <summary>Chuỗi rỗng → Visible (dùng cho chữ gợi ý trong ô nhập), ngược lại Collapsed.</summary>
 public sealed class EmptyToVisibleConverter : IValueConverter

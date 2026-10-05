@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace HeThongDoKhoangCach.ViewModels;
+namespace BeltTensionMeasurement.ViewModels;
 
 /// <summary>Lệnh đồng bộ; CanExecute được WPF tự hỏi lại qua CommandManager.</summary>
 public sealed class RelayCommand : ICommand

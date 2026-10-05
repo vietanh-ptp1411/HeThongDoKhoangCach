@@ -1,9 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
-using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.ViewModels;
+using BeltTensionMeasurement.Models;
+using BeltTensionMeasurement.ViewModels;
 
-namespace HeThongDoKhoangCach.Views;
+namespace BeltTensionMeasurement.Views;
 
 public partial class SettingsWindow : Window
 {

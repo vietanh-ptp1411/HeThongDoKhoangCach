@@ -1,4 +1,4 @@
-namespace HeThongDoKhoangCach.Models;
+namespace BeltTensionMeasurement.Models;
 
 /// <summary>Giao thức truyền thông với PLC.</summary>
 public enum PlcProtocol
@@ -60,7 +60,7 @@ public class TagDefinition
 
 /// <summary>
 /// Bảng địa chỉ PLC theo luồng vận hành mới:
-/// phần mềm ghi bit START (M0) / STOP (M15) / RESET và bit chủng loại (M40..M50) khi chọn model;
+/// Người vận hành bấm START trên App; PC gửi bit model, quy cách rồi lệnh StartCommand;
 /// PLC gửi liên tục lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm qua thanh ghi D / bit M
 /// và phần mềm đọc theo chu kỳ để hiển thị đồng thời.
 /// </summary>
@@ -95,15 +95,17 @@ public class PlcSettings
     /// <summary>Kết quả phân định của PLC. Trống cả hai → phần mềm tự so với quy cách của chủng loại.</summary>
     public TagDefinition JudgeOk { get; set; } = new() { Address = "M102", DataType = TagDataType.Bit };
     public TagDefinition JudgeNg { get; set; } = new() { Address = "M103", DataType = TagDataType.Bit };
-    /// <summary>PLC đang ở trạng thái chạy. Trống → theo nút START/STOP trên phần mềm.</summary>
+    /// <summary>PLC đang ở trạng thái chạy. Trống → theo yêu cầu START đã nhận / đo xong / STOP.</summary>
     public TagDefinition RunningState { get; set; } = new() { Address = "M104", DataType = TagDataType.Bit };
 
-    // ----- Bit lệnh phần mềm ghi xuống (theo yêu cầu khách: Start M0, Stop M15) -----
+    // ----- Bit lệnh phần mềm ghi xuống (M0 / M15 / M16 là địa chỉ minh họa) -----
     public TagDefinition StartCommand { get; set; } = new() { Address = "M0", DataType = TagDataType.Bit };
+    /// <summary>PC → PLC: mã mục đích 1..5, tùy chọn.</summary>
+    public TagDefinition PurposeWrite { get; set; } = new() { Address = "", DataType = TagDataType.Int16 };
     public TagDefinition StopCommand { get; set; } = new() { Address = "M15", DataType = TagDataType.Bit };
     public TagDefinition ResetCommand { get; set; } = new() { Address = "M16", DataType = TagDataType.Bit };
 
-    // ----- Quy cách ghi xuống PLC khi chọn model (tùy chọn, nếu PLC muốn nhận LSL/USL từ phần mềm) -----
+    // ----- Quy cách ghi khi bấm START, trước khi gửi lệnh chạy -----
     public TagDefinition SpecLslWrite { get; set; } = new() { Address = "", DataType = TagDataType.Float32 };
     public TagDefinition SpecUslWrite { get; set; } = new() { Address = "", DataType = TagDataType.Float32 };
 
@@ -121,6 +123,7 @@ public class PlcSettings
         JudgeOk = new() { Address = "M102", DataType = TagDataType.Bit };
         JudgeNg = new() { Address = "M103", DataType = TagDataType.Bit };
         RunningState = new() { Address = "M104", DataType = TagDataType.Bit };
+        PurposeWrite = new() { Address = "", DataType = TagDataType.Int16 };
         StartCommand = new() { Address = "M0", DataType = TagDataType.Bit };
         StopCommand = new() { Address = "M15", DataType = TagDataType.Bit };
         ResetCommand = new() { Address = "M16", DataType = TagDataType.Bit };
@@ -142,6 +145,7 @@ public class PlcSettings
         JudgeOk = new() { Address = "C102", DataType = TagDataType.Bit };
         JudgeNg = new() { Address = "C103", DataType = TagDataType.Bit };
         RunningState = new() { Address = "C104", DataType = TagDataType.Bit };
+        PurposeWrite = new() { Address = "", DataType = TagDataType.Int16, WordOrder = WordOrder.HighLow };
         StartCommand = new() { Address = "C0", DataType = TagDataType.Bit };
         StopCommand = new() { Address = "C15", DataType = TagDataType.Bit };
         ResetCommand = new() { Address = "C16", DataType = TagDataType.Bit };
@@ -173,8 +177,6 @@ public class AppSettings
     /// <summary>Mẫu nội dung mã QR của kết quả đo, vd "{Value}" hoặc "{Serial};{Model};{Value};{Result}".</summary>
     public string ResultQrTemplate { get; set; } = "{Value}";
 
-    /// <summary>Tự ghi vào lịch sử ngay khi PLC gửi kết quả mới và đã có OK/NG.</summary>
-    public bool AutoSaveOnMeasureDone { get; set; } = true;
     public int HistogramBins { get; set; } = 24;
 
     /// <summary>Quy cách / model đang chọn lần trước (tên hiển thị) – chọn lại sẵn khi mở phần mềm.</summary>

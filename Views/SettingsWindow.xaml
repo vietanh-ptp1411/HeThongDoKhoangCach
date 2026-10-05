@@ -1,9 +1,9 @@
-<Window x:Class="HeThongDoKhoangCach.Views.SettingsWindow"
+<Window x:Class="BeltTensionMeasurement.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:vm="clr-namespace:HeThongDoKhoangCach.ViewModels"
+        xmlns:vm="clr-namespace:BeltTensionMeasurement.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
         Title="Cài đặt hệ thống" Width="1140" Height="760" MinWidth="980" MinHeight="640"
@@ -159,7 +159,7 @@
                         </DataGrid>
                     <Expander Grid.Row="3" Header="Hướng dẫn địa chỉ và cách nhận kết quả" Margin="0,12,0,0">
 <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="130"><TextBlock Style="{StaticResource Hint}"
-                                   Text="Phần mềm GHI: START (M0) / STOP (M15) / RESET và bit chủng loại (bảng bên dưới, M40..M50). Phần mềm ĐỌC liên tục: lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm, bit trạng thái. ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (tự so quy cách để ra OK/NG, tự đếm theo lịch sử). Kết quả mới được nhận biết theo sườn lên bit 'Đo xong'; nếu để trống thì theo bộ đếm TOTAL tăng, nếu cũng trống thì theo giá trị 'Kết quả đo' thay đổi. Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/></ScrollViewer>
+                                   Text="Bấm START trên App: gửi model, LSL/USL và mục đích nếu cấu hình, rồi ghi lệnh START (ví dụ M0/C0). PLC nhận lệnh và đo một lần, tự xóa bit lệnh. App không nhận START từ PLC. STOP/RESET ghi từ App. Phần mềm ĐỌC liên tục: lực căng, khoảng cách, kết quả đo, OK/NG, bộ đếm, bit trạng thái. ĐỂ TRỐNG địa chỉ = PLC không cung cấp, phần mềm tự bù (tự so quy cách để ra OK/NG, tự đếm theo lịch sử). Kết quả mới được nhận biết theo sườn lên bit 'Đo xong'; nếu để trống thì theo bộ đếm TOTAL tăng, nếu cũng trống thì theo giá trị 'Kết quả đo' thay đổi. Dấu * là tag bắt buộc.   MC Protocol: D100, R200, W1A0 (hex), M100, X10 (hex)...   Modbus TCP: HR100, IR100, C100, DI100 hoặc 40101 / 30101 / 00101 / 10101.   Hệ số: giá trị đọc × hệ số (PLC lưu 370 → 0.01 để được 3.70)."/></ScrollViewer>
 </Expander>
 </Grid>
                 </Border></Grid>
@@ -245,10 +245,10 @@
                 </Grid>
             </TabItem>
             <TabItem AutomationProperties.Name="Thông tin &amp; dữ liệu">
-                <TabItem.Header><StackPanel><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Người KT, file lưu, biểu đồ" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
+                <TabItem.Header><StackPanel><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="13" FontWeight="SemiBold"/><TextBlock Text="Tiêu đề, file lưu, biểu đồ" FontSize="10.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,5,0,0"/></StackPanel></TabItem.Header>
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Thông tin hiển thị, đường dẫn dữ liệu và chế độ lưu." Style="{StaticResource Hint}"/></StackPanel>
+                    <StackPanel Margin="0,0,0,14"><TextBlock Text="Thông tin &amp; dữ liệu" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource ValueBrush}"/><TextBlock Text="Thông tin hiển thị, đường dẫn dữ liệu và biểu đồ. Kết quả luôn tự động lưu." Style="{StaticResource Hint}"/></StackPanel>
                     <Grid Grid.Row="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="THÔNG TIN HIỂN THỊ VÀ LƯU TRỮ"/>
@@ -264,7 +264,6 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Label}" Text="Tiêu đề hệ thống"/>
@@ -273,21 +272,19 @@
                             <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Label}" Text="Nhãn đơn vị / công ty"/>
                             <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding CompanyLabel}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Label}" Text="Mã người kiểm tra"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding Inspector}"/>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Label}" Text="Đơn vị lực căng"/>
-                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ForceUnit}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Label}" Text="Đơn vị lực căng"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ForceUnit}"/>
 
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
-                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Label}" Text="File lưu kết quả"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding ResultFilePath}"/>
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
-                            <TextBox Grid.Row="5" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource Label}" Text="Số cột histogram"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource InputBox}" Text="{Binding HistogramBins}" Width="120" HorizontalAlignment="Left"/>
 
-                            <CheckBox Grid.Row="6" Grid.Column="1"  Margin="0,8,0,0" IsChecked="{Binding AutoSaveOnMeasureDone}"
-                                      Content="Tự động lưu khi có kết quả và PASS/NG"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Text="Kết quả luôn được tự động lưu khi đã có OK/NG." Foreground="{StaticResource TextMutedBrush}"/>
                         </Grid>
                         <TextBlock Style="{StaticResource Hint}"
                                    Text="Đường dẫn tương đối được tính từ thư mục chứa file chạy. Kết quả được lưu theo serial, model và quy cách đã chọn; không cần file tra cứu bên ngoài."/>

@@ -5,8 +5,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parent.parent
-assets = json.loads((root/'artifacts/build/obj/HeThongDoKhoangCach/project.assets.json').read_text(encoding='utf-8'))
-payload = root/'artifacts/publish/1.2.1/win-x64'
+assets = json.loads((root/'artifacts/build/obj/BeltTensionMeasurement/project.assets.json').read_text(encoding='utf-8'))
+payload = root/'artifacts/publish/BeltTensionMeasurement/1.2.1/win-x64'
 destination = payload/'Licenses'
 destination.mkdir(exist_ok=True)
 cache = Path(next(iter(assets['packageFolders'])))
@@ -14,7 +14,7 @@ lines = ['THIRD-PARTY COMPONENTS / Belt Measurement 1.2.1', '',
          'Original package metadata and available license/notice files are retained in Licenses/.',
          'Each component remains subject to its own license.', '']
 packages = dict(assets['libraries'])
-runtime = json.loads((payload/'HeThongDoKhoangCach.runtimeconfig.json').read_text())
+runtime = json.loads((payload/'BeltTensionMeasurement.runtimeconfig.json').read_text())
 for framework in runtime['runtimeOptions']['includedFrameworks']:
     identifier = framework['name'] + '.Runtime.win-x64'
     packages[f"{identifier}/{framework['version']}"] = {'type':'package','path':f"{identifier.lower()}/{framework['version']}"}

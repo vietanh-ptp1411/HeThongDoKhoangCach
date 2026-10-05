@@ -1,7 +1,7 @@
 using System.Globalization;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.ViewModels;
+namespace BeltTensionMeasurement.ViewModels;
 
 /// <summary>Một dòng thống kê theo chủng loại và quy cách.</summary>
 public sealed class StatRow

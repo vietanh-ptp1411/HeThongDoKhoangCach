@@ -1,8 +1,8 @@
 using System.IO;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 using Microsoft.Data.Sqlite;
 
-namespace HeThongDoKhoangCach.Services;
+namespace BeltTensionMeasurement.Services;
 
 /// <summary>
 /// Database SQLite chứa bảng quy cách và model (mặc định Data\HeThongDo.db):

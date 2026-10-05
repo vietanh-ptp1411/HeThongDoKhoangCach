@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Net.Sockets;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>Thiết bị Mitsubishi đã phân tích từ chuỗi địa chỉ (vd "D100", "M200", "W1A0").</summary>
 internal readonly record struct McDevice(string Prefix, byte Code, int Number, bool IsBit)

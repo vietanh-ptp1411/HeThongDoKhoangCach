@@ -8,15 +8,15 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Input;
 using System.Windows.Interop;
-using HeThongDoKhoangCach;
-using HeThongDoKhoangCach.Controls;
-using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.Services;
-using HeThongDoKhoangCach.Services.Plc;
-using HeThongDoKhoangCach.ViewModels;
-using HeThongDoKhoangCach.Views;
+using BeltTensionMeasurement;
+using BeltTensionMeasurement.Controls;
+using BeltTensionMeasurement.Models;
+using BeltTensionMeasurement.Services;
+using BeltTensionMeasurement.Services.Plc;
+using BeltTensionMeasurement.ViewModels;
+using BeltTensionMeasurement.Views;
 
-internal static class Program
+internal static partial class Program
 {
     private static int _checks;
     private static readonly string Output = Path.Combine(Path.GetTempPath(), "BeltWorkflowChecks", Guid.NewGuid().ToString("N"));
@@ -64,7 +64,7 @@ internal static class Program
         var settings = Settings("manual-demo");
         settings.AutoConnectPlc = true;
         settings.Inspector = "DEMO";
-        settings.ResultQrTemplate = "{Serial};{Model};{Value};{Result}";
+        settings.ResultQrTemplate = ResultQrFormatter.DefaultTemplate;
         await using var vm = new MainViewModel(settings);
         vm.SelectedSpec = vm.Specs[2];
         vm.SelectedModel = vm.AvailableModels[1];
@@ -72,7 +72,7 @@ internal static class Program
         foreach (var serial in new[] { "985X57200-00123", "985X57200-00124", "985X57200-00125" })
         {
             vm.QrInput = serial;
-            await Call(vm, "ScanAsync");
+            await CompleteScan(vm);
             await Until(() => vm.StartCommand.CanExecute(null));
             int previous = vm.RecentRows.Count;
             vm.StartCommand.Execute(null);
@@ -81,6 +81,7 @@ internal static class Program
         var main = new MainWindow(vm);
         ((System.Windows.Controls.Grid)main.Content).Background = (Brush)Application.Current.Resources["BgBrush"];
         await Render((FrameworkElement)main.Content, 1540, 850, "main-window.png");
+        await Render((FrameworkElement)main.Content, 1180, 700, "main-window-small.png");
         var editorSettings = SettingsService.Clone(settings);
         editorSettings.DatabaseFilePath = @"Data\HeThongDo.db";
         var editor = new SettingsWindow(editorSettings);
@@ -94,6 +95,7 @@ internal static class Program
         var report = new ReportWindow(vm.RecentRows, _ => null, (_, _) => { });
         ((System.Windows.Controls.Grid)report.Content).Background = (Brush)Application.Current.Resources["BgBrush"];
         await Render((FrameworkElement)report.Content, 1680, 800, "report-qr.png");
+        await Render((FrameworkElement)report.Content, 980, 600, "report-small.png");
     }
 
     private static object? Invoke(object target, string name, params object[] args)
@@ -127,12 +129,12 @@ internal static class Program
         Check(db.Load()[0].Lsl == 3, "Invalid catalog does not overwrite existing data");
 
         await using var vm = new MainViewModel(settings);
-        Check(!vm.StartCommand.CanExecute(null) && !vm.SaveCommand.CanExecute(null), "No START or SAVE before selection and measurement");
+        Check(!vm.StartCommand.CanExecute(null) && !vm.ExportPdfCommand.CanExecute(null), "No START or PDF export before a measurement");
         vm.SelectedSpec = vm.Specs[2];
         Check(vm.AvailableModels.Select(m => m.Name).SequenceEqual(new[] { "GSM", "CPX" }), "Model list follows selected specification");
         vm.SelectedModel = vm.AvailableModels[1];
         vm.QrInput = "SERIAL-001";
-        await Call(vm, "ScanAsync");
+        await CompleteScan(vm);
         Check(vm.Model == "CPX" && vm.Serial == "SERIAL-001", "Scanning serial works directly without a master file");
 
         var monitor = (PlcMonitor)typeof(MainViewModel).GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
@@ -163,8 +165,8 @@ internal static class Program
         Check(vm.RecentRows.Count == 1 && vm.IsPass == true, "One scan and START accept exactly one completed result");
         Check(!vm.StartCommand.CanExecute(null) && vm.CanEditSelection, "Completed measurement unlocks scan but requires a new serial scan before START");
         Check(vm.HistogramGroups[2].Values.Count == 1 && vm.HistogramGroups[0].Values.Count == 0, "Histograms group by recorded specification limits");
-        vm.SaveCommand.Execute(null);
-        Check(vm.RecentRows.Count == 1, "Manual SAVE cannot duplicate automatically saved result");
+        Invoke(vm, "SaveCurrent");
+        Check(vm.RecentRows.Count == 1, "Retry cannot duplicate an automatically saved result");
         await Call(vm, "StopMachineAsync");
         Poll(vm, false, 9.9, false, true);
         Poll(vm, true, 9.9, false, true);
@@ -176,7 +178,7 @@ internal static class Program
         Poll(vm, true, 4.25);
         Check(vm.RecentRows.Count == 1 && vm.ResultQrText == "3.70", "Calling START without rescanning cannot arm another measurement");
         vm.QrInput = "SERIAL-001";
-        await Call(vm, "ScanAsync");
+        await CompleteScan(vm);
         await Call(vm, "StartMachineAsync");
         Poll(vm, false);
         Poll(vm, true, 4.25);
@@ -184,14 +186,14 @@ internal static class Program
         await Call(vm, "StopMachineAsync");
 
         vm.QrInput = "SERIAL-002";
-        await Call(vm, "ScanAsync");
+        await CompleteScan(vm);
         Check(vm.ResultQrText == "" && vm.MeasuredValue is null, "New serial clears previous result and QR");
-        vm.QrInput = new string('x', 257);
+        vm.ScanTarget = ScanField.Serial;
+        vm.SerialInput = new string('x', 257);
         await Call(vm, "StartMachineAsync");
         Check(vm.CanEditSelection && vm.MeasuredValue is null, "Invalid replacement barcode cannot start using previous serial");
         vm.QrInput = "SERIAL-002";
-        await Call(vm, "ScanAsync");
-        settings.AutoSaveOnMeasureDone = false;
+        await CompleteScan(vm);
         settings.ResultQrTemplate = "{Serial};{Model};{Value};{Result}";
         Poll(vm, false);
         await Call(vm, "StartMachineAsync");
@@ -199,14 +201,14 @@ internal static class Program
         Check(vm.MeasuredValueText == "0.00" && vm.ResultQrText == "SERIAL-002;CPX;0.00;NG", "Zero measurement is a valid NG result and QR uses configured fields");
         Poll(vm, false);
         Poll(vm, true, 4.5);
-        Check(vm.RecentRows.Count == 2 && vm.SaveCommand.CanExecute(null) && !vm.CanEditSelection && vm.MeasuredValue == 0,
-            "Manual mode retains only the first completed result until SAVE");
+        Check(vm.RecentRows.Count == 3 && vm.CanEditSelection && vm.MeasuredValue == 0,
+            "Every completed result saves automatically and unlocks the next input");
         settings.ResultQrTemplate = "{Value}";
-        vm.SaveCommand.Execute(null);
-        Check(vm.RecentRows.Count == 3 && vm.RecentRows.Count(r => r.Serial == "SERIAL-002") == 1 && vm.CanEditSelection,
-            "Manual SAVE writes exactly one result and unlocks the next scan");
+        Invoke(vm, "SaveCurrent");
+        Check(vm.RecentRows.Count == 3 && vm.RecentRows.Count(r => r.Serial == "SERIAL-002") == 1,
+            "Retrying automatic save cannot duplicate a saved result");
         Check(vm.RecentRows.Single(r => r.Serial == "SERIAL-002").QrText == "SERIAL-002;CPX;0.00;NG",
-            "Manual save retains QR generated at measurement time even if the template changes");
+            "Saved QR remains unchanged after template edits");
         settings.ResultQrTemplate = "{Serial};{Model};{Value};{Result}";
         var reloaded = new ResultStore(settings.ResultFilePath);
         reloaded.Load();
@@ -268,9 +270,9 @@ internal static class Program
             var sheet = workbook.Worksheet("ExportResultData");
             Check(sheet.LastRowUsed()!.RowNumber() >= 3, "Excel export contains saved measurements");
             Check(sheet.LastColumnUsed()!.ColumnNumber() == 13 && sheet.Cell(1, 2).GetString() == "Chủng loại"
-                  && sheet.Cell(1, 3).GetString() == "Mã quét (Serial)" && sheet.Cell(2, 7).GetDouble() == vm.RecentRows[0].Value,
+                  && sheet.Cell(1, 3).GetString() == "Mã quét (Serial)" && sheet.Cell(2, 6).GetDouble() == vm.RecentRows[0].Value,
                 "Excel omits order/line and keeps measurement columns aligned");
-            Check(sheet.Cell(1, 13).GetString() == "QR" && sheet.Cell(2, 13).GetString() == vm.RecentRows[0].QrText,
+            Check(sheet.Cell(1, 12).GetString() == "QR" && sheet.Cell(2, 12).GetString() == vm.RecentRows[0].QrText,
                 "Excel QR column preserves the payload as text");
             Check(sheet.Pictures.Count() == vm.RecentRows.Count(r => !string.IsNullOrEmpty(r.QrText)),
                 "Excel embeds one QR image per saved payload");
@@ -282,11 +284,11 @@ internal static class Program
         vm.SelectedSpec = vm.Specs[2];
         vm.SelectedModel = vm.AvailableModels[1];
         vm.QrInput = "SERIAL-003";
-        await Call(vm, "ScanAsync");
+        await CompleteScan(vm);
         Poll(vm, false);
         await Call(vm, "StartMachineAsync");
         Poll(vm, true, 4.25, true, false);
-        vm.SaveCommand.Execute(null);
+        Invoke(vm, "SaveCurrent");
         var window = new MainWindow(vm);
         await Render((FrameworkElement)window.Content, 1540, 850, "main-window.png");
         await Render((FrameworkElement)window.Content, 1180, 700, "main-window-small.png");
@@ -307,26 +309,26 @@ internal static class Program
         await Render((FrameworkElement)reportWindow.Content, 1680, 800, "report-qr.png");
         Check(bindings.Errors.Count == 0, "Main/settings WPF views render without binding errors: " + string.Join("; ", bindings.Errors));
 
-        // Gửi sự kiện bàn phím qua cây WPF từ các vị trí khác nhau, không click ô Serial.
-        foreach (var source in new UIElement[]
-        {
-            (UIElement)window.FindName("SpecBox"), (UIElement)window.FindName("ModelBox"), (UIElement)window.Content,
-        })
-        {
-            bool captured = SendScannerInput(source, "AUTO-SCAN-001");
-            Check(captured && vm.Serial == "AUTO-SCAN-001" && vm.QrInput == "" && vm.Model == "CPX" && vm.StartCommand.CanExecute(null),
-                $"Scanner input from {source.GetType().Name} reaches serial intact and Enter does not start measurement");
-        }
+        var serialBox = (System.Windows.Controls.TextBox)window.FindName("QrBox");
+        var inspectorBox = (System.Windows.Controls.TextBox)window.FindName("InspectorBox");
+        var purposeBox = (System.Windows.Controls.TextBox)window.FindName("PurposeScanBox");
+        Check(SendScannerInput(inspectorBox, "EMP-FIRST") && vm.InspectorCode == "EMP-FIRST", "Clicking employee field routes the barcode to employee");
+        var oldPurpose = vm.SelectedPurpose;
+        Check(SendScannerInput(serialBox, "CLICK-001") && vm.Serial == "CLICK-001" && vm.InspectorCode == "EMP-FIRST" && vm.SelectedPurpose == oldPurpose,
+            "Clicking serial field changes only serial, preserving employee and purpose");
+        Check(SendScannerInput(serialBox, "CLICK-002") && vm.Serial == "CLICK-002" && vm.InspectorCode == "EMP-FIRST", "Consecutive scans stay in serial rather than advancing to employee");
+        Check(SendScannerInput(inspectorBox, "EMP-SECOND") && vm.InspectorCode == "EMP-SECOND" && vm.Serial == "CLICK-002", "Employee rescan does not change serial");
+        Check(SendScannerInput(purposeBox, "PURPOSE:3") && vm.SelectedPurpose?.Code == 3, "Purpose barcode has its own input field");
+        Check(SendScannerInput(purposeBox, "3") && vm.PurposeInput == "" && vm.StartCommand.CanExecute(null), "Rescanning the same purpose confirms and clears its input");
+        int beforeScan = vm.RecentRows.Count;
+        Check(SendScannerInput((UIElement)window.Content, "OUTSIDE-FIELDS") && vm.Serial == "CLICK-002" && vm.InspectorCode == "EMP-SECOND" && vm.RecentRows.Count == beforeScan,
+            "Scanning outside input fields cannot change metadata or trigger START");
+        Check(vm.StartCommand.CanExecute(null), "Scanner Enter confirms input and leaves measurement waiting for mouse START");
         await Call(vm, "StartMachineAsync");
-        Check(SendScannerInput((UIElement)window.FindName("ModelBox"), "IGNORED-WHILE-BUSY") && vm.Serial == "AUTO-SCAN-001" && !vm.CanEditSelection,
-            "Scanner input while measuring cannot replace serial or activate a focused control");
-        Poll(vm, false);
-        Poll(vm, true);
-        vm.SaveCommand.Execute(null);
-        Check(SendScannerInput((UIElement)window.Content, "AUTO-SCAN-002") && vm.Serial == "AUTO-SCAN-002",
-            "After measurement the next scan is accepted without clicking serial");
-        Check(!SendScannerInput((UIElement)settingsWindow.Content, "SETTINGS-INPUT") && vm.Serial == "AUTO-SCAN-002",
-            "Typing in settings does not enter the main screen serial");
+        Check(SendScannerInput(serialBox, "IGNORED-WHILE-BUSY") && vm.Serial == "CLICK-002", "Scan while measuring cannot replace the active serial");
+        Poll(vm, false); Poll(vm, true); Invoke(vm, "SaveCurrent");
+        Check(SendScannerInput(serialBox, "CLICK-003") && vm.Serial == "CLICK-003", "Selecting serial accepts the next measurement scan");
+        Check(!SendScannerInput((UIElement)settingsWindow.Content, "SETTINGS-INPUT") && vm.Serial == "CLICK-003", "Settings typing remains separate from measurement inputs");
 
         await using var simulated = new SimulationPlcClient(new PlcSettings(), db.Load());
         await simulated.ConnectAsync();
@@ -355,7 +357,7 @@ internal static class Program
         live.SelectedSpec = live.Specs[1];
         live.SelectedModel = live.AvailableModels[0];
         live.QrInput = "LIVE-001";
-        await Call(live, "ScanAsync");
+        await CompleteScan(live);
         await live.StartAsync();
         await Until(() => live.StartCommand.CanExecute(null));
         live.StartCommand.Execute(null);
@@ -364,7 +366,7 @@ internal static class Program
         await Until(() => !live.MachineRunning);
         Check(live.RecentRows.Count == 1 && !live.StartCommand.CanExecute(null), "Background polling completes one measurement and requires another scan");
         live.QrInput = "LIVE-002";
-        await Call(live, "ScanAsync");
+        await CompleteScan(live);
         live.StartCommand.Execute(null);
         await Until(() => live.RecentRows.Count == 2);
         Check(live.RecentRows[0].Serial == "LIVE-002" && live.RecentRows[1].Serial == "LIVE-001",
@@ -378,7 +380,7 @@ internal static class Program
         fallback.SelectedSpec = fallback.Specs[0];
         fallback.SelectedModel = fallback.AvailableModels[0];
         fallback.QrInput = "FALLBACK-1";
-        await Call(fallback, "ScanAsync");
+        await CompleteScan(fallback);
         var fallbackMonitor = (PlcMonitor)typeof(MainViewModel).GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fallback)!;
         SetField(fallbackMonitor, "_client", new RecordingClient());
         Invoke(fallback, "OnConnectionChanged", true);
@@ -390,12 +392,28 @@ internal static class Program
         Check(fallback.RecentRows.Count == 1 && fallback.Serial == "FALLBACK-1", "Counter fallback ignores further results after the single measurement");
         await Call(fallback, "StopMachineAsync");
         fallback.QrInput = "FALLBACK-2";
-        await Call(fallback, "ScanAsync");
+        await CompleteScan(fallback);
         await Call(fallback, "StartMachineAsync");
         Invoke(fallback, "OnConnectionChanged", false);
         Invoke(fallback, "OnConnectionChanged", true);
         Invoke(fallback, "OnSnapshot", new PlcSnapshot { Total = 13, ResultValue = 3.8, Force = 2 });
         Check(fallback.RecentRows.Count == 1 && fallback.ResultQrText == "", "Connection loss discards incomplete cycle and ignores reconnect result");
+        await CheckMouseStart();
+        await CheckAutoSaveAndPdf();
+    }
+
+    private static async Task CompleteScan(MainViewModel vm)
+    {
+        var serial = vm.QrInput;
+        vm.ScanTarget = ScanField.Serial;
+        vm.QrInput = serial;
+        await Call(vm, "ScanAsync");
+        vm.ScanTarget = ScanField.Inspector;
+        vm.QrInput = "EMP-23474";
+        await Call(vm, "ScanAsync");
+        vm.ScanTarget = ScanField.Purpose;
+        vm.QrInput = "1";
+        await Call(vm, "ScanAsync");
     }
 
     private static async Task Until(Func<bool> predicate)
@@ -411,12 +429,21 @@ internal static class Program
     private static bool SendScannerInput(UIElement source, string text)
     {
         bool handled = true;
+        if (source is System.Windows.Controls.TextBox selectedBox) selectedBox.SelectAll();
         foreach (char c in text)
         {
             var input = new TextCompositionEventArgs(Keyboard.PrimaryDevice, new TextComposition(InputManager.Current, source, c.ToString()))
             { RoutedEvent = TextCompositionManager.PreviewTextInputEvent };
             source.RaiseEvent(input);
-            handled &= input.Handled;
+            if (!input.Handled && source is System.Windows.Controls.TextBox box)
+            {
+                // Emulate TextBox's normal text insertion after the tunneling preview event.
+                box.SelectedText = c.ToString();
+                box.CaretIndex = box.SelectionStart + box.SelectionLength;
+                box.SelectionLength = 0;
+                box.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+            }
+            else handled &= input.Handled;
         }
         // Cửa sổ native ẩn chỉ cung cấp PresentationSource cho sự kiện phím.
         using var presentation = new HwndSource(new HwndSourceParameters("ScannerInputChecks") { Width = 1, Height = 1, WindowStyle = 0 });
@@ -451,13 +478,22 @@ internal static class Program
     private sealed class RecordingClient : IPlcClient
     {
         public Dictionary<string, bool> Bits { get; } = [];
+        public List<string> Writes { get; } = [];
+        public string? FailAddress { get; set; }
+        public string? PauseAddress { get; set; }
+        public TaskCompletionSource? Paused { get; set; }
         public bool IsConnected => true;
         public Task ConnectAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task DisconnectAsync() => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public Task<ushort[]> ReadWordsAsync(string address, int count, CancellationToken ct = default) => Task.FromResult(new ushort[count]);
         public Task<bool[]> ReadBitsAsync(string address, int count, CancellationToken ct = default) => Task.FromResult(new bool[count]);
-        public Task WriteWordsAsync(string address, ushort[] values, CancellationToken ct = default) => Task.CompletedTask;
-        public Task WriteBitAsync(string address, bool value, CancellationToken ct = default) { Bits[address] = value; return Task.CompletedTask; }
+        public async Task WriteWordsAsync(string address, ushort[] values, CancellationToken ct = default)
+        {
+            if (address == FailAddress) throw new IOException("Injected write failure");
+            Writes.Add(address + "=" + string.Join(",", values));
+            if (address == PauseAddress && Paused is not null) await Paused.Task;
+        }
+        public Task WriteBitAsync(string address, bool value, CancellationToken ct = default) { if (address == FailAddress) throw new IOException("Injected write failure"); Writes.Add(address + "=" + value); Bits[address] = value; return Task.CompletedTask; }
     }
 }

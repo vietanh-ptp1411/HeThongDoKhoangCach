@@ -10,8 +10,8 @@ Unicode true
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\MVALabBeltMeasurement"
 
 Name "${APP_NAME}"
-OutFile "${ReleaseDir}\HeThongDoLucCangBelt-Setup-${VERSION}-win-x64.exe"
-InstallDir "$LOCALAPPDATA\Programs\HeThongDoKhoangCach"
+OutFile "${ReleaseDir}\BeltTensionMeasurement-Setup-${VERSION}-win-x64.exe"
+InstallDir "$LOCALAPPDATA\Programs\BeltTensionMeasurement"
 InstallDirRegKey HKCU "${REG_KEY}" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
@@ -26,7 +26,9 @@ VIAddVersionKey /LANG=1033 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "MVA Lab"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\HeThongDoKhoangCach.exe"
+!define MUI_ICON "..\Assets\BeltTensionMeasurement.ico"
+!define MUI_UNICON "..\Assets\BeltTensionMeasurement.ico"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\BeltTensionMeasurement.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Mở phần mềm đo lực căng Belt"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_WELCOME
@@ -56,10 +58,23 @@ Function .onInit
 FunctionEnd
 
 Function CheckApplicationClosed
-  IfFileExists "$INSTDIR\HeThongDoKhoangCach.exe" check_file done
-  check_file:
+  ; Bản cũ có tên executable khác nhưng dùng cùng khóa InstallDir khi nâng cấp.
+  IfFileExists "$INSTDIR\HeThongDoKhoangCach.exe" legacy_check legacy_done
+  legacy_check:
     ClearErrors
     FileOpen $0 "$INSTDIR\HeThongDoKhoangCach.exe" a
+    IfErrors legacy_busy
+    FileClose $0
+    Goto legacy_done
+  legacy_busy:
+    IfSilent fail
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Vui lòng đóng phiên bản cũ trước khi nâng cấp." IDRETRY legacy_check
+    Goto fail
+  legacy_done:
+  IfFileExists "$INSTDIR\BeltTensionMeasurement.exe" check_file done
+  check_file:
+    ClearErrors
+    FileOpen $0 "$INSTDIR\BeltTensionMeasurement.exe" a
     IfErrors busy
     FileClose $0
     Goto done
@@ -75,6 +90,18 @@ FunctionEnd
 Section "Ứng dụng và hướng dẫn sử dụng" SEC_APP
   SectionIn RO
   Call CheckApplicationClosed
+  ; Chỉ gỡ các binary mang tên cũ; giữ nguyên appsettings.json và Data.
+  ClearErrors
+  Delete "$INSTDIR\HeThongDoKhoangCach.exe"
+  Delete "$INSTDIR\HeThongDoKhoangCach.dll"
+  Delete "$INSTDIR\HeThongDoKhoangCach.deps.json"
+  Delete "$INSTDIR\HeThongDoKhoangCach.runtimeconfig.json"
+  Delete "$INSTDIR\HeThongDoKhoangCach.pdb"
+  IfErrors 0 legacy_removed
+    MessageBox MB_ICONSTOP "Không xóa được tệp chương trình cũ. Đóng ứng dụng rồi cài lại." /SD IDOK
+    SetErrorLevel 3
+    Abort
+  legacy_removed:
   SetOverwrite on
   !insertmacro InstallPayload
   SetOutPath "$INSTDIR\HuongDan"
@@ -87,7 +114,7 @@ Section "Ứng dụng và hướng dẫn sử dụng" SEC_APP
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "MVA Lab"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\HeThongDoKhoangCach.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\BeltTensionMeasurement.exe"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegStr HKCU "${UNINSTALL_KEY}" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
@@ -99,19 +126,19 @@ SectionEnd
 Section "Lối tắt trên Desktop và Start Menu" SEC_SHORTCUTS
   SetOutPath "$INSTDIR"
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\HeThongDoKhoangCach.exe"
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\BeltTensionMeasurement.exe"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Hướng dẫn sử dụng.lnk" "$INSTDIR\HuongDan\HuongDanSuDung.pdf"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Gỡ cài đặt.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\HeThongDoKhoangCach.exe"
+  CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\BeltTensionMeasurement.exe"
 SectionEnd
 
 Function un.onInit
   SetShellVarContext current
   SetRegView 64
-  IfFileExists "$INSTDIR\HeThongDoKhoangCach.exe" 0 done
+  IfFileExists "$INSTDIR\BeltTensionMeasurement.exe" 0 done
   check_file:
     ClearErrors
-    FileOpen $0 "$INSTDIR\HeThongDoKhoangCach.exe" a
+    FileOpen $0 "$INSTDIR\BeltTensionMeasurement.exe" a
     IfErrors busy
     FileClose $0
     Goto done

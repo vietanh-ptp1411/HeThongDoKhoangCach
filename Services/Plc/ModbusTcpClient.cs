@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Net.Sockets;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>
 /// Client Modbus TCP. Địa chỉ chấp nhận:

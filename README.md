@@ -1,47 +1,63 @@
-# Hệ thống đo lực căng belt – PLC & Loadcell
+# Belt Tension Measurement — Hệ thống đo lực căng Belt
 
-Ứng dụng WPF (.NET 10) theo luồng trong **GIAO DIỆN.pdf**: chọn quy cách, chọn model thuộc quy cách,
-scan serial, nhấn START, đo một lần rồi hiển thị kết quả và mã QR. Lượt tiếp theo scan lại và nhấn START.
+Tên project/namespace: `BeltTensionMeasurement`. Mở `BeltTensionMeasurement.slnx` trong Visual Studio;
+file thực thi sau build là `BeltTensionMeasurement.exe`.
+Thư mục workspace hiện tại: `D:\BeltTensionMeasurement`.
 
-## Chạy ứng dụng
+Ứng dụng WPF (.NET 10) theo **003.pdf**: chọn quy cách → dòng hàng (model) → scan serial và MSNV →
+chọn/scan mục đích → bấm START trên phần mềm → nhận một kết quả, OK/NG và QR.
+
+## Chạy và thử mô phỏng
 
 ```powershell
 dotnet build
-dotnet run --project HeThongDoKhoangCach.csproj
+dotnet run --project BeltTensionMeasurement.csproj
 ```
 
-Bộ cài Windows x64 và hướng dẫn PDF/Word: `artifacts/release/1.2.1`.
-Quy trình tạo lại bộ cài và kiểm tra cài đặt xem [Packaging/README.md](Packaging/README.md).
+Chọn `3.5 ~ 6 mm` → `CPX`, bấm ô Serial rồi quét/gõ mã + Enter; bấm ô MSNV rồi quét mã nhân viên + Enter; chọn mục đích hoặc bấm ô Quét mục đích và quét `1` + Enter.
+Bấm **START** bằng chuột: App gửi model, quy cách, mục đích nếu cấu hình rồi ghi bit START xuống PLC.
+Cùng cách bấm này áp dụng cho cả máy thật và mô phỏng; mỗi lần bấm đo một lần, không chờ bit START từ PLC.
 
-Mặc định chạy PLC mô phỏng. Chọn `3.5 ~ 6 mm` → `CPX` → scan/gõ serial và Enter → START.
-Mỗi START trong mô phỏng đo một lần, trả kết quả sau khoảng 1.5 giây rồi dừng.
-Phần mềm đọc lực căng/khoảng cách liên tục khi đã kết nối PLC.
+## Trình tự theo mục 3–4 của 003.pdf
 
-## Trình tự vận hành
+1. Chọn quy cách và **Dòng hàng** (model). Chỉ hiện model thuộc quy cách; không dùng file master/đơn hàng/line.
+2. Bấm ô **Serial** rồi quét serial; bấm ô **MSNV** rồi quét mã nhân viên. Enter xác nhận mã và chọn sẵn nội dung để lần quét sau thay thế.
+   Khi nhập tay, không bắt buộc Enter: điền Serial/MSNV hợp lệ và chọn mục đích rồi bấm START; App chốt đúng các giá trị đang hiển thị.
+   Nếu START bị khóa, dòng hướng dẫn và tooltip của nút nêu lý do cụ thể (PLC, mục đích, dữ liệu nhập hoặc trạng thái máy).
+   Không tự chuyển ô hoặc tự bắt mã từ bảng/nút. Có thể nhập hai ô theo thứ tự bất kỳ; sửa ô này giữ nguyên ô kia và mục đích đã chọn.
+3. Chọn **Mục đích đo của sản phẩm** từ danh sách hoặc bấm ô **Quét mục đích (1–5)** rồi quét barcode:
 
-1. **Quy cách**: chọn từ database SQLite.
-2. **Chủng loại**: chỉ hiển thị model thuộc quy cách đã chọn. Đổi quy cách sẽ xóa model và serial cũ.
-3. **Số serial**: scan mã vạch cho lượt đo, kết thúc bằng Enter. Có thể gõ serial rồi bấm START trực tiếp.
-   Mã quét được coi là toàn bộ serial. Model và quy cách do người vận hành chọn, không cần file master hoặc thông tin đơn hàng/line.
-   Thiết bị khách hàng xác nhận: **Zebra DS8178**, đế thu kết nối máy tính qua **USB**.
-   Cấu hình **USB Keyboard HID** và gửi **Enter** sau mã. Khi màn hình đo đang hoạt động và đã chọn quy cách/model,
-   có thể bấm cò quét ngay sau khi chọn model hoặc bấm vào bảng/nút, không cần click ô Serial.
-   Trong lúc đo, mã quét mới được bỏ qua để giữ đúng serial của lượt đang chạy. Ô lọc ngày vẫn cho nhập ngày bằng bàn phím;
-   hộp thoại Cài đặt/Đăng nhập/Báo cáo nhận bàn phím riêng. Chức năng này không bắt mã khi đang dùng ứng dụng khác.
-4. **START**: gửi bit model, LSL/USL nếu cấu hình, rồi bit START xuống PLC để đo một lần.
-   Trong khi đo, khóa lựa chọn và scan để kết quả dùng đúng serial/model/quy cách.
-5. Khi PLC báo đo xong, chốt giá trị, lực căng, thời gian và serial. Nếu chưa có OK/NG thì chờ phân định;
-   giá trị đã chốt không bị thay bằng giá trị ở chu kỳ đọc sau. Không cấu hình OK/NG thì so với LSL/USL.
-6. Hiển thị **giá trị + PASS/NG + QR**, tự lưu đúng một kết quả cho lượt START này.
-   Các tín hiệu đo xong tiếp theo không tạo thêm bản ghi hoặc thay đổi kết quả/QR đã chốt.
-   Tắt tự lưu thì bấm **LƯU DỮ LIỆU** trước lượt tiếp theo. Khi ghi file lỗi, kết quả chưa ghi được giữ để thử lại.
-   **RESET** bỏ dữ liệu chưa lưu và xóa serial.
-7. Để đo lượt tiếp theo, scan lại serial rồi nhấn **START**. Có thể scan lại cùng serial nếu cần đo lại.
+| Mã barcode | Mục đích |
+|---|---|
+| 1 | Đo kiểm tra đặc thù hằng ngày |
+| 2 | Đo khởi đầu công việc |
+| 3 | Điều tra lỗi |
+| 4 | Yêu cầu các phòng ban |
+| 5 | Khác |
 
-**STOP** dùng để hủy lượt đo đang chạy, giữ serial để có thể nhấn START đo lại. Lực căng/khoảng cách vẫn cập nhật
-khi PLC còn kết nối. Khi mất kết nối, hủy lượt chưa hoàn tất; nhấn START đo lại sau khi kết nối phục hồi.
-Lần đọc đầu tiên sau kết nối chỉ tạo mốc phát hiện, không lấy kết quả cũ của PLC.
-Nếu PLC báo máy vẫn đang chạy, chờ máy dừng hoặc bấm STOP trước khi đổi serial/model.
+Barcode nhận `1`..`5`, `PURPOSE:1`..`PURPOSE:5`, tên mục đích hoặc tên có số thứ tự như trong danh sách.
+Đây là quy ước triển khai vì PDF chưa có mẫu nội dung barcode mục đích của khách.
+Không suy đoán MSNV hay mục đích từ hình dạng serial. Mã không hợp lệ phải được quét lại/chọn lại.
+
+4. Bấm nút **START** trên phần mềm. Chỉ bật nút khi đủ serial, MSNV, mục đích, model, PLC online và không còn lượt đo/kết quả chờ lưu/hộp thoại đang mở.
+5. App gửi bit model, giới hạn nếu cấu hình, mã mục đích nếu cấu hình; cuối cùng ghi bit START. PLC nhận lệnh và đo một lần.
+6. Chốt một kết quả, MSNV và mục đích theo thông tin tại lúc chấp nhận START. Hiển thị giá trị ở trên, **OK/NG lớn bên trái, QR bên phải** như PDF.
+   Có bit OK/NG thì nhận phân định PLC; để trống cả hai thì so với LSL/USL (bao gồm hai biên).
+   QR mặc định chỉ chứa giá trị đo như `3.70`. Kết quả lưu kèm MSNV, mục đích và QR; báo cáo có bộ lọc mục đích, Excel có cột Mục đích đo.
+7. Lượt tiếp theo bấm ô Serial và scan lại. MSNV và mục đích giữ nguyên; bấm ô tương ứng nếu muốn đổi. STOP hủy lượt đang chạy; RESET xóa thông tin của lượt đang chuẩn bị.
+
+Kết quả **luôn tự động lưu** ngay khi có OK/NG, kể cả cấu hình cũ từng tắt tự lưu. Nếu ghi file lỗi, giữ kết quả
+và tự thử lại mỗi 5 giây; tạm khóa lượt mới, RESET và đóng cửa sổ cho đến khi lưu thành công.
+Kiểm tra quyền ghi, dung lượng ổ đĩa hoặc file đang bị chương trình khác khóa khi có lỗi lưu.
+Khi mất kết nối, hủy lượt chưa hoàn tất;
+sau khi nối lại, kiểm tra thông tin và bấm START để đo lại. Dữ liệu PLC không tự khởi động lượt đo.
+
+## Lệnh START từ App tới PLC
+
+- Người vận hành bấm START bằng chuột trên màn hình. App gửi bit model, giới hạn và mục đích (nếu cấu hình), sau đó ghi StartCommand=1.
+- StartCommand mặc định `M0` (MC) / `C0` (Modbus). PLC tự xóa lệnh sau khi xử lý. Không còn đọc StartRequest/M105/C105.
+- STOP/RESET có thể hủy lượt đang chuẩn bị/chạy. Lỗi gửi dữ liệu hoặc mất kết nối sẽ không tiếp tục gửi lệnh START.
+- Serial và MSNV lưu trong App; PurposeWrite tùy chọn ghi mã mục đích 1..5. Địa chỉ PLC cần khớp chương trình tại máy.
 
 ## Danh mục quy cách và model
 
@@ -80,7 +96,7 @@ nên mẫu có thể thay đổi trong **CÀI ĐẶT → QR kết quả**, có x
 
 - `{Value}`: giá trị có hai chữ số thập phân, dấu chấm.
 - `{Serial};{Model};{Value};{Result}`: ví dụ `985X57200-00123;CPX;3.70;OK`.
-- Các trường khác: `{Spec}`, `{Lsl}`, `{Usl}`, `{Force}`, `{Date}`, `{Time}`, `{DateTime}`, `{Inspector}`.
+- Các trường khác: `{Spec}`, `{Lsl}`, `{Usl}`, `{Force}`, `{Date}`, `{Time}`, `{DateTime}`, `{Inspector}`, `{Purpose}`, `{PurposeCode}`.
 
 Mã QR vẽ đen/trắng, có vùng trắng bao quanh, căn theo pixel. Chỉ sinh QR khi có kết quả mới hoàn chỉnh;
 scan serial khác hoặc RESET sẽ xóa QR cũ. Nội dung quá dài sẽ báo lỗi thay vì hiển thị mã không đọc được.
@@ -91,6 +107,13 @@ File Excel cũng có cột **QR**, gồm ảnh mã và nội dung dạng chữ. 
 Cần thử quét trên màn hình thực tế bằng Zebra DS8178 và xác nhận định dạng mà hệ thống Brother nhận.
 
 ## Lịch sử, biểu đồ và xuất Excel
+
+Nút **XUẤT PDF** trên màn hình chính xuất các kết quả theo bộ lọc ngày hiện tại. PDF A4 ngang có
+serial, dòng hàng, quy cách, lực căng, giá trị, OK/NG, thời gian, MSNV, mục đích đo và QR đã lưu.
+Tiêu đề bảng lặp lại trên mỗi trang; số trang và tổng OK/NG được ghi trong báo cáo. Có thể chọn nơi lưu
+file `.pdf` trực tiếp, không cần máy in PDF. Không có kết quả trong bộ lọc thì nút xuất bị khóa.
+Trong cửa sổ **BÁO CÁO**, nút **Xuất PDF** nằm cạnh Excel và xuất đúng bảng sau khi bấm **Tìm**,
+bao gồm bộ lọc ngày, dòng hàng, mục đích, OK/NG và từ khóa. Tiêu đề PDF ghi bộ lọc đã áp dụng cho bảng.
 
 Mỗi quy cách có một histogram, gộp theo LSL/USL **đã lưu trong kết quả**. Các model cùng quy cách dùng chung biểu đồ.
 Bảng kết quả, histogram và Excel tuân theo bộ lọc ngày; bộ đếm lấy từ PLC nếu cấu hình, nếu không thì đếm lịch sử đã lọc.
@@ -110,11 +133,12 @@ Hai giao thức được cài đặt trực tiếp trong mã nguồn (không ph�
 
 | Chiều | Nhóm | Tag | Kiểu | MC | Modbus | Ghi chú |
 |-------|------|-----|------|----|--------|---------|
-| PC → PLC | Lệnh | START * | Bit | M0 | C0 | Máy chạy. Phần mềm ghi mức 1, PLC tự xóa |
+| PC → PLC | Lệnh | START * | Bit | M0 | C0 | Bật sau khi gửi xong dữ liệu; PLC tự xóa |
+| PC → PLC | Thông tin | Mục đích đo | Int16 | (trống) | (trống) | Tùy chọn, mã 1..5 |
 | PC → PLC | Lệnh | STOP | Bit | M15 | C15 | Máy tạm dừng |
 | PC → PLC | Lệnh | RESET | Bit | M16 | C16 | Xóa giá trị / bộ đếm |
 | PC → PLC | Chủng loại | Bit theo chủng loại | Bit | M40..M50 | C40..C50 | Mức 1 cho model đang chọn, các bit khác mức 0 (DANH MỤC trong CÀI ĐẶT) |
-| PC → PLC | Quy cách | LSL / USL ghi xuống | Float32 | (trống) | (trống) | Tùy chọn, ghi khi chọn model và trước START |
+| PC → PLC | Quy cách | LSL / USL ghi xuống | Float32 | (trống) | (trống) | Tùy chọn, ghi khi bấm START, trước lệnh chạy |
 | PLC → PC | Giá trị đo | Lực căng (Loadcell) * | Float32 | D100 | HR100 | Đọc liên tục |
 | PLC → PC | Giá trị đo | Khoảng cách * | Float32 | D102 | HR102 | Đọc liên tục |
 | PLC → PC | Giá trị đo | Kết quả đo (chốt) | Float32 | D104 | HR104 | Trống → lấy khoảng cách tại lúc Đo xong. Nhận kết quả theo tín hiệu hoàn tất, kể cả giá trị 0 |
@@ -140,8 +164,8 @@ Hai giao thức được cài đặt trực tiếp trong mã nguồn (không ph�
 
 - `Data\results.jsonl`: mỗi dòng một kết quả (JSON Lines, chỉ ghi thêm), kèm `QrText` là nội dung QR tại lúc chốt kết quả.
 - Xuất Excel: sheet `ExportResultData` với các cột No, Chủng loại, Mã quét (Serial),
-  Hạng mục kiểm tra, Quy cách, Lực căng (gf), Giá trị (mm), Kết quả, Ngày kiểm tra, Người kiểm tra,
-  Máy tính, Ghi chú, QR (ảnh mã và nội dung đã lưu).
+  Quy cách, Lực căng (gf), Giá trị (mm), Kết quả, Ngày kiểm tra, Người kiểm tra,
+  Máy tính, Ghi chú, QR (ảnh mã và nội dung đã lưu), Mục đích đo.
 - `appsettings.json` cạnh file exe: kết nối, tag PLC, đường dẫn database/lịch sử, mẫu QR và lựa chọn gần nhất.
   Cấu hình kết nối và lịch sử cũ được giữ; bảng `ModelSpecs` và định dạng QR đầu vào cũ được thay bằng danh mục SQLite mới.
 
@@ -164,6 +188,14 @@ Services/     SpecDatabase, ResultQrFormatter, ResultStore, ExcelExporter,
 Services/Plc/ IPlcClient, McProtocolClient, ModbusTcpClient, SimulationPlcClient, TagCodec
 ViewModels/   MainViewModel, SettingsViewModel, StatisticsViewModel, ReportViewModel
 Controls/     HistogramControl, QrCodeControl, ChartMath
-Views/        SettingsWindow, StatisticsWindow, ReportWindow, LoginWindow
+Views/        SettingsWindow, StatisticsWindow, ReportWindow
 Tests/        WorkflowChecks (console, WPF STA)
 ```
+
+Tiêu đề được căn giữa; góc trên trái là logo rồi tên đơn vị, ngày/giờ ở phía trên phải.
+Tên đơn vị chỉnh tại Cài đặt → Thông tin & dữ liệu → Nhãn đơn vị / công ty; logo được nhúng từ `Assets/CompanyLogo.jpg`.
+Nhóm Tổng/OK/NG nằm cạnh bộ lọc của bảng kết quả.
+Thanh trạng thái phía dưới gồm PLC (trạng thái và Kết nối/Ngắt), Loadcell, máy và thông báo;
+ba nút Cài đặt / Thống kê / Báo cáo nằm ở góc dưới phải.
+Rê chuột vào nhóm PLC để xem giao thức, IP/port và phiên bản. MSNV được nhập/quét tại ô MSNV trên màn hình đo;
+không có chức năng đăng nhập riêng.

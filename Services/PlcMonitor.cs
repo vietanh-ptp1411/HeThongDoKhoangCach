@@ -1,7 +1,7 @@
-using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.Services.Plc;
+using BeltTensionMeasurement.Models;
+using BeltTensionMeasurement.Services.Plc;
 
-namespace HeThongDoKhoangCach.Services;
+namespace BeltTensionMeasurement.Services;
 
 /// <summary>
 /// Ảnh chụp toàn bộ tag đọc được trong một chu kỳ poll.

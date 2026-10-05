@@ -1,6 +1,6 @@
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 public static class PlcClientFactory
 {

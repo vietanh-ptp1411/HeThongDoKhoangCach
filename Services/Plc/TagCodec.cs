@@ -1,7 +1,7 @@
 using System.Text;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>Chuyển đổi giữa word thô của PLC và giá trị số/chuỗi theo <see cref="TagDefinition"/>.</summary>
 public static class TagCodec

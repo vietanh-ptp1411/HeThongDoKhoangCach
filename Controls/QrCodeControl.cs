@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using QRCoder;
 
-namespace HeThongDoKhoangCach.Controls;
+namespace BeltTensionMeasurement.Controls;
 
 /// <summary>
 /// Vẽ mã QR của <see cref="Text"/> (thư viện QRCoder sinh ma trận, vẽ bằng DrawingContext).

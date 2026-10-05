@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 
-namespace HeThongDoKhoangCach.Models;
+namespace BeltTensionMeasurement.Models;
 
 /// <summary>Một kết quả đo đã lưu (một dòng trong bảng ExportResultData).</summary>
 public sealed class MeasurementResult
@@ -20,12 +20,13 @@ public sealed class MeasurementResult
     public bool IsOk { get; set; }
     public DateTime InspectedAt { get; set; }
     public string Inspector { get; set; } = "";
+    public int? PurposeCode { get; set; }
+    public string Purpose { get; set; } = "";
     /// <summary>Ghi chú của người kiểm tra (ô GHI CHÚ).</summary>
     public string Note { get; set; } = "";
     /// <summary>Tên máy tính thực hiện đo.</summary>
     public string PcName { get; set; } = "";
 
     [JsonIgnore] public string ResultText => IsOk ? "OK" : "NG";
-    [JsonIgnore] public string ItemName => "Khoảng cách";
     [JsonIgnore] public string SpecText => string.Create(CultureInfo.InvariantCulture, $"{Lsl:0.##} ~ {Usl:0.##} mm");
 }

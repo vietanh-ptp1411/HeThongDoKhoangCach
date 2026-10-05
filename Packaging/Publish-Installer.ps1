@@ -11,8 +11,8 @@ if (!$ReleaseDirectory) { $ReleaseDirectory = Join-Path $projectRoot 'artifacts\
 foreach ($requiredFile in @($CompilerPath, (Join-Path $GuideDirectory 'HuongDanSuDung.pdf'), (Join-Path $GuideDirectory 'HuongDanSuDung.docx'))) {
     if (!(Test-Path -LiteralPath $requiredFile -PathType Leaf)) { throw "Missing release input: $requiredFile" }
 }
-$publishFolder = Join-Path $projectRoot 'artifacts\publish\1.2.1\win-x64'
-& dotnet publish (Join-Path $projectRoot 'HeThongDoKhoangCach.csproj') -c Release -r win-x64 --self-contained true --artifacts-path (Join-Path $projectRoot 'artifacts\build') -o $publishFolder -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false
+$publishFolder = Join-Path $projectRoot 'artifacts\publish\BeltTensionMeasurement\1.2.1\win-x64'
+& dotnet publish (Join-Path $projectRoot 'BeltTensionMeasurement.csproj') -c Release -r win-x64 --self-contained true --artifacts-path (Join-Path $projectRoot 'artifacts\build') -o $publishFolder -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 & python (Join-Path $PSScriptRoot 'Collect-Licenses.py')
 if ($LASTEXITCODE -ne 0) { throw 'Collecting component notices failed.' }

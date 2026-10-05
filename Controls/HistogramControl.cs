@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 
-namespace HeThongDoKhoangCach.Controls;
+namespace BeltTensionMeasurement.Controls;
 
 /// <summary>
 /// Histogram theo mock BISG: trục Y "Số lượng", trục X "Khoảng cách (mm)", vạch LSL/USL đứt nét,

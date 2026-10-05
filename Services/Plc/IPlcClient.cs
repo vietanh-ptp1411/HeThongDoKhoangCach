@@ -1,4 +1,4 @@
-namespace HeThongDoKhoangCach.Services.Plc;
+namespace BeltTensionMeasurement.Services.Plc;
 
 /// <summary>Lỗi truyền thông hoặc lỗi giao thức từ PLC.</summary>
 public sealed class PlcException : Exception

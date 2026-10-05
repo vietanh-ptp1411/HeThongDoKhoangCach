@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
-using HeThongDoKhoangCach.Services;
-using HeThongDoKhoangCach.ViewModels;
+using BeltTensionMeasurement.Services;
+using BeltTensionMeasurement.ViewModels;
 
-namespace HeThongDoKhoangCach;
+namespace BeltTensionMeasurement;
 
 public partial class App : Application
 {

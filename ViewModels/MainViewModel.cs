@@ -3,10 +3,10 @@ using System.Globalization;
 using System.IO;
 using System.Windows.Input;
 using System.Windows.Threading;
-using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.Services;
+using BeltTensionMeasurement.Models;
+using BeltTensionMeasurement.Services;
 
-namespace HeThongDoKhoangCach.ViewModels;
+namespace BeltTensionMeasurement.ViewModels;
 
 /// <summary>Một khối histogram trên màn hình chính (một nhóm chủng loại có cùng quy cách).</summary>
 public sealed class HistogramGroupViewModel : ViewModelBase
@@ -45,6 +45,83 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     // ----- phát hiện kết quả mới từ PLC -----
     private bool _hasSnapshot;
+    private int _operationVersion;
+    private int _dialogDepth;
+    public bool IsSimulation => P.Protocol == PlcProtocol.Simulation;
+    public string StartButtonText => "START";
+    public IReadOnlyList<MeasurementPurpose> Purposes => MeasurementPurpose.All;
+    private MeasurementPurpose? _selectedPurpose;
+    public MeasurementPurpose? SelectedPurpose
+    {
+        get => _selectedPurpose;
+        set
+        {
+            if (!CanEditSelection || (value is not null && !Purposes.Contains(value))) return;
+            if (!SetProperty(ref _selectedPurpose, value)) return;
+            QrInput = PurposeInput = "";
+            RaiseJudgeChanged();
+        }
+    }
+    private string _inspectorCode = "";
+    public string InspectorCode { get => _inspectorCode; private set => SetProperty(ref _inspectorCode, value); }
+    private ScanField _scanTarget;
+    public ScanField ScanTarget
+    {
+        get => _scanTarget;
+        set { if (!CanEditSelection || !SetProperty(ref _scanTarget, value)) return; QrInput = ""; OnPropertyChanged(nameof(ScanTargetText)); }
+    }
+    public string ScanTargetText => ScanTarget switch { ScanField.Inspector => "Quét mã nhân viên", ScanField.Purpose => "Quét mục đích (1–5)", _ => "Quét serial máy" };
+    public void BeginDialog() { _dialogDepth++; RaiseJudgeChanged(); }
+    public void EndDialog() { _dialogDepth = Math.Max(0, _dialogDepth - 1); RaiseJudgeChanged(); }
+    private string _serialInput = "", _inspectorInput = "", _purposeInput = "";
+    public string SerialInput
+    {
+        get => _serialInput;
+        set { if (CanEditSelection && SetProperty(ref _serialInput, value)) { _serialReady = false; _serialEdited = true; RaiseJudgeChanged(); } }
+    }
+    public string InspectorInput
+    {
+        get => _inspectorInput;
+        set { if (CanEditSelection && SetProperty(ref _inspectorInput, value)) RaiseJudgeChanged(); }
+    }
+    public string PurposeInput
+    {
+        get => _purposeInput;
+        set { if (CanEditSelection && SetProperty(ref _purposeInput, value)) RaiseJudgeChanged(); }
+    }
+    public void AcceptScan(ScanField field)
+    {
+        if (!ScanCommand.CanExecute(null)) return;
+        ScanTarget = field;
+        QrInput = field switch { ScanField.Serial => SerialInput, ScanField.Inspector => InspectorInput, _ => PurposeInput };
+        ScanCommand.Execute(null);
+    }
+    private static bool ValidCode(string text)
+        => !string.IsNullOrWhiteSpace(text) && text.Trim().Length <= 256 && !text.Trim().Any(char.IsControl);
+    private MeasurementPurpose? InputPurpose => string.IsNullOrWhiteSpace(PurposeInput) ? SelectedPurpose : MeasurementPurpose.Parse(PurposeInput);
+    private bool ReadyForStart => StartBlockReason.Length == 0;
+    public string StartBlockReason
+    {
+        get
+        {
+            if (!PlcOnline) return PlcActive ? "Đang kết nối PLC…" : "PLC chưa kết nối – nhấn KẾT NỐI PLC.";
+            if (!_hasSnapshot) return "Đang chờ dữ liệu đầu tiên từ PLC…";
+            if (_starting || _measurementActive || MachineRunning) return "Máy đang đo – chờ hoàn tất hoặc nhấn STOP.";
+            if (_pendingRecord) return "Đang chờ bit OK/NG từ PLC.";
+            if (_unsavedResults.Count > 0) return $"Có {_unsavedResults.Count} kết quả chưa lưu được – kiểm tra file kết quả; đang tự thử lại.";
+            if (_dialogDepth > 0) return "Đóng hộp thoại để bấm START.";
+            if (SelectedSpec is null) return "Chọn quy cách đo.";
+            if (SelectedModel is null) return "Chọn dòng hàng (model).";
+            if (!ValidCode(SerialInput)) return "Nhập hoặc quét Serial hợp lệ (1–256 ký tự).";
+            if (!ValidCode(InspectorInput)) return "Nhập hoặc quét MSNV hợp lệ (1–256 ký tự).";
+            if (InputPurpose is null) return "Chọn mục đích đo hoặc nhập mã mục đích hợp lệ (1–5).";
+            if (!_serialReady && !_serialEdited) return "Lượt trước đã hoàn tất – nhập/quét lại Serial cho lượt mới.";
+            if (!SelectedModel.HasPlcBit) return "Model chưa có bit PLC – kiểm tra Cài đặt → Quy cách & model.";
+            if (!P.StartCommand.IsConfigured) return "Chưa cấu hình địa chỉ START trong Cài đặt → Địa chỉ PLC.";
+            return "";
+        }
+    }
+
     private bool _lastMeasureDone;
     private int _lastTotal;
     private double _lastResultValue;
@@ -52,8 +129,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _pendingRecord;
     private SpecDefinition? _currentSpec;
     private ModelDefinition? _selectedModel;
-    private bool _measurementActive, _serialReady, _starting;
+    private bool _measurementActive, _serialReady, _serialEdited, _starting;
     private readonly Queue<MeasurementResult> _unsavedResults = new();
+    private DateTime _nextSaveRetry;
     private MeasurementResult? _completedResult;
     private MeasurementResult? _cycleResult;
     private readonly SemaphoreSlim _modelWriteGate = new(1, 1);
@@ -77,7 +155,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(SelectedModel));
             OnPropertyChanged(nameof(ConditionText));
             RememberSelection();
-            _ = SendModelToPlcSafeAsync();
         }
     }
     public ModelDefinition? SelectedModel
@@ -92,7 +169,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             InvalidateSerial();
             OnPropertyChanged();
             RememberSelection();
-            _ = SendModelToPlcSafeAsync();
         }
     }
     public string ConditionText => SelectedSpec?.Condition ?? "";
@@ -108,7 +184,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void InvalidateSerial()
     {
         _serialReady = false;
+        _serialEdited = false;
         Serial = QrInput = "";
+        _serialInput = _inspectorInput = _purposeInput = "";
+        OnPropertyChanged(nameof(SerialInput));
+        OnPropertyChanged(nameof(InspectorInput));
+        OnPropertyChanged(nameof(PurposeInput));
+        InspectorCode = "";
+        _selectedPurpose = null;
+        _scanTarget = ScanField.Serial;
+        OnPropertyChanged(nameof(SelectedPurpose));
+        OnPropertyChanged(nameof(ScanTarget));
+        OnPropertyChanged(nameof(ScanTargetText));
         ClearCurrentMeasurement();
     }
     private void LoadCatalog()
@@ -147,20 +234,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _monitor.ConnectionChanged += c => _dispatcher.InvokeAsync(() => OnConnectionChanged(c));
         _monitor.ErrorOccurred += m => _dispatcher.InvokeAsync(() => StatusMessage = "Lỗi PLC: " + m);
 
-        _clock = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Now = DateTime.Now, _dispatcher);
+        _clock = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => OnClockTick(), _dispatcher);
         _clock.Stop();
 
         ScanCommand = new AsyncRelayCommand(ScanAsync, () => CanEditSelection && SelectedModel is not null, ReportError);
         ConnectCommand = new AsyncRelayCommand(ToggleConnectAsync, null, ReportError);
-        StartCommand = new AsyncRelayCommand(StartMachineAsync, () => PlcOnline && _hasSnapshot && CanEditSelection && SelectedModel is not null && (_serialReady || !string.IsNullOrWhiteSpace(QrInput)), ReportError);
+        StartCommand = new AsyncRelayCommand(StartMachineAsync, () => ReadyForStart, ReportError);
         StopCommand = new AsyncRelayCommand(StopMachineAsync, () => PlcOnline, ReportError);
         ResetCommand = new AsyncRelayCommand(ResetAsync, null, ReportError);
-        SaveCommand = new RelayCommand(SaveCurrent, () => _unsavedResults.Count > 0);
+        ExportPdfCommand = new AsyncRelayCommand(ExportPdfAsync, () => RecentRows.Count > 0, ReportError);
         ExportCommand = new AsyncRelayCommand(ExportAsync, () => RecentRows.Count > 0, ReportError);
         OpenSettingsCommand = new AsyncRelayCommand(OpenSettingsAsync, () => CanEditSelection, ReportError);
         OpenReportCommand = new RelayCommand(() => ShowReportDialog?.Invoke(_store.All));
         OpenStatisticsCommand = new RelayCommand(() => ShowStatisticsDialog?.Invoke(_store.All, Specs.ToList()));
-        LoginCommand = new RelayCommand(Login);
         FilterTodayCommand = new RelayCommand(() => SetDateRange(DateTime.Today, DateTime.Today));
         FilterWeekCommand = new RelayCommand(() => SetDateRange(DateTime.Today.AddDays(-6), DateTime.Today));
         FilterMonthCommand = new RelayCommand(() => SetDateRange(DateTime.Today.AddDays(-29), DateTime.Today));
@@ -184,7 +270,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public Action<string, bool>? ShowMessage { get; set; }
     public Action<IReadOnlyList<MeasurementResult>>? ShowReportDialog { get; set; }
     public Action<IReadOnlyList<MeasurementResult>, IReadOnlyList<SpecDefinition>>? ShowStatisticsDialog { get; set; }
-    public Func<string, string?>? ShowLoginDialog { get; set; }
 
     // ----- Lệnh -----
 
@@ -193,12 +278,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand ResetCommand { get; }
-    public ICommand SaveCommand { get; }
+    public ICommand ExportPdfCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand OpenSettingsCommand { get; }
     public ICommand OpenReportCommand { get; }
     public ICommand OpenStatisticsCommand { get; }
-    public ICommand LoginCommand { get; }
     public ICommand FilterTodayCommand { get; }
     public ICommand FilterWeekCommand { get; }
     public ICommand FilterMonthCommand { get; }
@@ -209,7 +293,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public string Title => _settings.Title;
     public string CompanyLabel => _settings.CompanyLabel;
     public string ForceUnit => _settings.ForceUnit;
-    public string InspectorText => "Người KT: " + _settings.Inspector;
+    public string PlcLabel => IsSimulation ? "PLC (DEMO)" : "PLC";
     public string VersionText => "VERSION: " + AppVersion + (_settings.Plc.Protocol == PlcProtocol.Simulation ? "  (DEMO)" : "");
     public int HistogramBins => _settings.HistogramBins;
 
@@ -267,10 +351,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             if (!SetProperty(ref _plcOnline, value)) return;
             OnPropertyChanged(nameof(PlcStatusText));
+            OnPropertyChanged(nameof(LoadcellStatusText));
             OnPropertyChanged(nameof(ScanHint));
         }
     }
-    public string PlcStatusText => PlcOnline ? "ONLINE" : _plcActive ? "ĐANG KẾT NỐI" : "OFFLINE";
+    public string PlcStatusText => PlcOnline ? "Đã kết nối" : _plcActive ? "Đang kết nối…" : "Chưa kết nối";
 
     /// <summary>Đã bấm KẾT NỐI PLC (vòng đọc đang chạy, có thể đang thử kết nối lại).</summary>
     public bool PlcActive
@@ -284,7 +369,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(ScanHint));
         }
     }
-    public string ConnectButtonText => PlcActive ? "NGẮT KẾT NỐI" : "KẾT NỐI PLC";
+    public string ConnectButtonText => PlcActive ? "Ngắt" : "Kết nối";
 
     private bool _loadcellStable;
     public bool LoadcellStable
@@ -292,7 +377,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _loadcellStable;
         private set { if (SetProperty(ref _loadcellStable, value)) OnPropertyChanged(nameof(LoadcellStatusText)); }
     }
-    public string LoadcellStatusText => LoadcellStable ? "STABLE" : "UNSTABLE";
+    public string LoadcellStatusText => !PlcOnline ? "—" : LoadcellStable ? "Ổn định" : "Chưa ổn định";
 
     private bool _machineRunning;
     /// <summary>Máy đang chạy: theo bit trạng thái của PLC nếu có, không thì theo nút START/STOP vừa bấm.</summary>
@@ -306,13 +391,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             RaiseJudgeChanged();
         }
     }
-    public string MachineStateText => MachineRunning ? "ĐANG CHẠY" : "DỪNG";
+    public string MachineStateText => MachineRunning ? "Đang chạy" : "Dừng";
 
     // ----- Serial và thông tin đo -----
 
     private string _qrInput = "";
     public string QrInput { get => _qrInput; set => SetProperty(ref _qrInput, value); }
-    public string QrPlaceholder => "Scan mã vạch serial, kết thúc bằng Enter";
+    public string QrPlaceholder => "Scan serial → MSNV → mục đích (1–5), Enter sau mỗi mã";
 
     private string _serial = "";
     public string Serial { get => _serial; private set { if (SetProperty(ref _serial, value)) OnPropertyChanged(nameof(ScanHint)); } }
@@ -346,7 +431,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         get
         {
-            if (IsPass is { } ok) return ok ? "PASS" : "NG";
+            if (IsPass is { } ok) return ok ? "OK" : "NG";
             if (_pendingRecord) return "CHỜ KẾT QUẢ";
             return _measurementActive || _starting || MachineRunning ? "ĐANG ĐO" : "---";
         }
@@ -354,6 +439,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private void RaiseJudgeChanged()
     {
+        OnPropertyChanged(nameof(StartBlockReason));
         OnPropertyChanged(nameof(CanEditSelection));
         CommandManager.InvalidateRequerySuggested();
         OnPropertyChanged(nameof(JudgeState));
@@ -362,21 +448,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>Dòng hướng dẫn (đỏ) dưới khối thông tin đo.</summary>
-    public string ScanHint
-    {
-        get
-        {
-            if (!PlcActive) return "PLC chưa kết nối – nhấn KẾT NỐI PLC ở thanh trạng thái.";
-            if (!PlcOnline) return "Đang kết nối PLC...";
-            if (_unsavedResults.Count > 0) return $"Có {_unsavedResults.Count} kết quả chờ lưu – nhấn LƯU DỮ LIỆU.";
-            if (SelectedSpec is null) return "Bước 1: Chọn quy cách đo.";
-            if (SelectedModel is null) return "Bước 2: Chọn chủng loại thuộc quy cách.";
-            if (_pendingRecord) return "Đang chờ bit OK/NG từ PLC.";
-            if (_measurementActive || _starting || MachineRunning) return "Đang đo – chờ kết quả từ PLC.";
-            if (!_serialReady) return "Bước 3: Scan serial cho lượt đo tiếp theo.";
-            return "Bước 4: Nhấn START để đo một lần với serial này.";
-        }
-    }
+    public string ScanHint => ReadyForStart ? "Sẵn sàng – bấm START trên phần mềm." : StartBlockReason;
 
     private string _statusMessage = "";
     public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
@@ -434,7 +506,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _clock.Stop();
+        TryFlushPendingResults();
         await _monitor.StopAsync();
+    }
+
+    private void OnClockTick()
+    {
+        Now = DateTime.Now;
+        if (_unsavedResults.Count > 0 && DateTime.UtcNow >= _nextSaveRetry) SaveCurrent();
+    }
+
+    public bool TryFlushPendingResults()
+    {
+        if (_unsavedResults.Count > 0) SaveCurrent();
+        return _unsavedResults.Count == 0;
     }
 
     // ================= Kết nối PLC =================
@@ -447,7 +532,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ResetDetection();
         await _monitor.StartAsync(_settings.Plc, Specs.ToList());
         StatusMessage = _settings.Plc.Protocol == PlcProtocol.Simulation
-            ? "Chế độ mô phỏng – chọn quy cách, model, scan serial rồi START"
+            ? "DEMO – chọn quy cách/model, scan serial và MSNV, chọn mục đích, rồi bấm START"
             : $"Đang kết nối {ConnectionText}...";
         CommandManager.InvalidateRequerySuggested();
     }
@@ -469,11 +554,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             StatusMessage = "Đã kết nối PLC";
             ResetDetection();
-            // PLC có thể vừa khởi động lại: gửi lại bit chủng loại đang chọn.
-            _ = SendModelToPlcSafeAsync();
         }
         else
         {
+            _operationVersion++;
             _measurementActive = _pendingRecord = false;
             _cycleResult = null;
             MachineRunning = false;
@@ -497,6 +581,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Mỗi chu kỳ poll: đổ toàn bộ dữ liệu PLC lên màn hình, phát hiện kết quả mới để ghi lịch sử.</summary>
     private void OnSnapshot(PlcSnapshot s)
     {
+        bool firstSnapshot = !_hasSnapshot;
         Force = s.Force;
         Distance = s.Distance;
         LoadcellStable = s.LoadcellStable;
@@ -511,6 +596,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         if (DetectNewResult(s) && _measurementActive) OnNewResult(s);
         else if (_pendingRecord) TryRecord();
+        if (firstSnapshot) RaiseJudgeChanged();
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -553,6 +639,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         // Mỗi START chỉ nhận một kết quả; lượt tiếp theo phải scan lại serial.
         _measurementActive = false;
         _serialReady = false;
+        _serialEdited = false;
+        _scanTarget = ScanField.Serial;
+        OnPropertyChanged(nameof(ScanTarget));
+        OnPropertyChanged(nameof(ScanTargetText));
         if (!RunningFromPlc) MachineRunning = false;
         ResultQrText = ""; // Không để QR của mẫu trước cạnh giá trị mới đang chờ OK/NG.
         if (!double.IsFinite(s.ResultValue ?? s.Distance) || !double.IsFinite(s.Force))
@@ -565,15 +655,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         MeasuredValue = Math.Round(s.ResultValue ?? s.Distance, 2);
         if (JudgeFromPlc) IsPass = s.JudgeNg == true ? false : s.JudgeOk == true ? true : null;
-        _cycleResult = new MeasurementResult
-        {
-            Serial = Serial, Model = Model,
-            Lsl = SelectedSpec!.Lsl, Usl = SelectedSpec.Usl,
-            Inspector = _settings.Inspector, PcName = Environment.MachineName,
-            Value = MeasuredValue.Value,
-            Force = Math.Round(s.Force, 2),
-            InspectedAt = s.Timestamp == default ? DateTime.Now : s.Timestamp,
-        };
+        if (_cycleResult is not { } captured) return;
+        captured.Value = MeasuredValue.Value;
+        captured.Force = Math.Round(s.Force, 2);
+        captured.InspectedAt = s.Timestamp == default ? DateTime.Now : s.Timestamp;
 
         if (!JudgeFromPlc)
         {
@@ -611,9 +696,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _completedResult.QrText = ResultQrText;
         _unsavedResults.Enqueue(_completedResult);
         _pendingRecord = false;
-        if (_settings.AutoSaveOnMeasureDone) SaveCurrent();
-        else StatusMessage = (ok ? "Kết quả: PASS" : "Kết quả: NG") + " – nhấn LƯU DỮ LIỆU để ghi lịch sử";
-        if (qrTooLong) StatusMessage = "Kết quả đã chốt nhưng nội dung QR quá dài. Rút ngắn mẫu trong CÀI ĐẶT.";
+        SaveCurrent();
+        if (qrTooLong && _unsavedResults.Count == 0) StatusMessage = "Kết quả đã chốt nhưng nội dung QR quá dài. Rút ngắn mẫu trong CÀI ĐẶT.";
         RaiseJudgeChanged();
     }
 
@@ -631,19 +715,37 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private Task ScanAsync()
     {
         if (!CanEditSelection || SelectedSpec is null || SelectedModel is null) return Task.CompletedTask;
-        var serial = QrInput.Trim();
-        if (serial.Length == 0) return Task.CompletedTask;
-        _serialReady = false;
-        if (serial.Length > 256 || serial.Any(char.IsControl))
+        var input = QrInput.Trim();
+        if (input.Length == 0) return Task.CompletedTask;
+        if (input.Length > 256 || input.Any(char.IsControl))
         {
-            StatusMessage = "Serial không hợp lệ (tối đa 256 ký tự, không chứa ký tự điều khiển).";
+            if (ScanTarget == ScanField.Serial) _serialReady = false;
+            StatusMessage = "Mã không hợp lệ (tối đa 256 ký tự, không chứa ký tự điều khiển).";
             return Task.CompletedTask;
         }
-        ClearCurrentMeasurement();
-        Serial = serial;
+        switch (ScanTarget)
+        {
+            case ScanField.Serial:
+                ClearCurrentMeasurement();
+                Serial = input;
+                SerialInput = input;
+                _serialReady = true;
+                StatusMessage = $"Đã nhận serial {Serial}. Bấm ô MSNV để quét mã nhân viên nếu cần.";
+                break;
+            case ScanField.Inspector:
+                InspectorInput = input;
+                InspectorCode = input;
+                StatusMessage = $"Đã nhận MSNV {InspectorCode}. Chọn hoặc quét mục đích đo.";
+                break;
+            case ScanField.Purpose:
+                var purpose = MeasurementPurpose.Parse(input);
+                if (purpose is null) { StatusMessage = "Mục đích không hợp lệ. Quét mã 1–5 hoặc chọn trong danh sách."; return Task.CompletedTask; }
+                SelectedPurpose = purpose;
+                PurposeInput = "";
+                StatusMessage = $"Đã chọn {purpose.DisplayName}. Bấm START trên phần mềm.";
+                break;
+        }
         QrInput = "";
-        _serialReady = true;
-        StatusMessage = $"Đã nhận serial {Serial} – {Model}, {SpecText}. Nhấn START.";
         RaiseJudgeChanged();
         return Task.CompletedTask;
     }
@@ -660,7 +762,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             if (!PlcOnline)
             {
                 if (Model.Length > 0) StatusMessage = "PLC chưa kết nối – bit chủng loại sẽ được gửi khi kết nối lại";
-                return;
+                throw new InvalidOperationException("PLC chưa kết nối.");
             }
 
             var allBits = SpecCatalog.AllPlcBits(Specs);
@@ -676,18 +778,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 await _monitor.WriteNumberAsync(P.SpecUslWrite, spec.Usl);
             }
 
+            if (SelectedPurpose is { } purpose) await _monitor.WriteNumberAsync(P.PurposeWrite, purpose.Code);
+
             if (target.Length > 0)
                 StatusMessage = $"Đã bật bit {target} cho chủng loại {Model} – quy cách {SpecText}";
             else if (Model.Length > 0)
                 StatusMessage = $"Chủng loại '{Model}' chưa gán bit PLC trong CÀI ĐẶT – PLC chưa nhận được chủng loại";
         }
         finally { _modelWriteGate.Release(); }
-    }
-
-    private async Task SendModelToPlcSafeAsync()
-    {
-        try { await SendModelToPlcAsync(); }
-        catch (Exception ex) { ReportError(ex); }
     }
 
     private static bool SameAddress(string a, string b)
@@ -697,20 +795,46 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartMachineAsync()
     {
-        if (!CanEditSelection || !PlcOnline || !_hasSnapshot) return;
-        if (!string.IsNullOrWhiteSpace(QrInput)) await ScanAsync();
-        if (!_serialReady || SelectedSpec is null || SelectedModel is null) return;
+        if (!ReadyForStart)
+        {
+            StatusMessage = StartBlockReason;
+            return;
+        }
+        if (!SelectedModel!.HasPlcBit || !P.StartCommand.IsConfigured)
+        {
+            StatusMessage = "Chưa thể START: kiểm tra bit model và địa chỉ lệnh START trong Cài đặt.";
+            return;
+        }
+        // Nhập tay không cần Enter: chốt đúng nội dung đang hiện trước khi gửi lệnh.
+        var purpose = InputPurpose!;
+        Serial = SerialInput.Trim();
+        InspectorCode = InspectorInput.Trim();
+        SelectedPurpose = purpose;
+        QrInput = PurposeInput = "";
+        _serialReady = true;
+        var captured = new MeasurementResult
+        {
+            Serial = Serial, Model = Model, Lsl = SelectedSpec!.Lsl, Usl = SelectedSpec.Usl,
+            Inspector = InspectorCode, PurposeCode = SelectedPurpose!.Code, Purpose = SelectedPurpose.Name,
+            PcName = Environment.MachineName,
+        };
+        int version = _operationVersion;
         _starting = true;
         RaiseJudgeChanged();
         await _commandGate.WaitAsync();
         try
         {
+            if (version != _operationVersion) return;
+            // Xóa lệnh cũ, gửi dữ liệu rồi ghi START=1 cuối cùng.
+            await _monitor.WriteCommandAsync(P.StartCommand, false);
             await SendModelToPlcAsync();
+            if (version != _operationVersion || !PlcOnline) return;
             ClearCurrentMeasurement();
+            _cycleResult = captured;
             _measurementActive = true;
             await _monitor.WriteCommandAsync(P.StartCommand, true);
             if (!RunningFromPlc) MachineRunning = true;
-            StatusMessage = $"Đã gửi START ({P.StartCommand.Address}) – đo một lần với serial {Serial}";
+            StatusMessage = $"Đã gửi model {Model} và START ({P.StartCommand.Address}) – đo một lần cho serial {Serial}.";
         }
         catch
         {
@@ -723,6 +847,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StopMachineAsync()
     {
+        _operationVersion++;
         await _commandGate.WaitAsync();
         try
         {
@@ -738,6 +863,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ResetAsync()
     {
+        if (!TryFlushPendingResults()) return; // Không xóa kết quả chưa ghi thành công.
+        _operationVersion++;
         await _commandGate.WaitAsync();
         try
         {
@@ -764,7 +891,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             try { _store.Append(result); }
             catch (Exception ex)
             {
-                ReportError(new IOException("Không ghi được file kết quả: " + ex.Message, ex));
+                _nextSaveRetry = DateTime.UtcNow.AddSeconds(5);
+                StatusMessage = "Không ghi được file kết quả: " + ex.Message + " – tự thử lại sau 5 giây.";
                 break; // Giữ kết quả chưa ghi để thử lại, không mất các mẫu khi vẫn đang đo.
             }
             _unsavedResults.Dequeue();
@@ -789,21 +917,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ShowMessage?.Invoke($"Đã xuất {rows.Count} kết quả ({RangeText()}) ra file:\n{path}", false);
     }
 
+    private async Task ExportPdfAsync()
+    {
+        // Chốt bộ lọc/dữ liệu trước hộp thoại để PDF luôn khớp nội dung đã chọn.
+        var rows = RecentRows.OrderBy(r => r.No).ToList();
+        if (rows.Count == 0) return;
+        var range = RangeText();
+        var company = CompanyLabel;
+        var path = ChooseExportPath?.Invoke($"BaoCao_{DateTime.Now:yyyyMMdd_HHmmss}.pdf");
+        if (string.IsNullOrEmpty(path)) return;
+        StatusMessage = "Đang xuất PDF…";
+        await Task.Run(() => PdfExporter.Export(rows, path, range, company));
+        StatusMessage = $"Đã xuất {rows.Count} kết quả ra PDF";
+        ShowMessage?.Invoke($"Đã xuất {rows.Count} kết quả ({range}) ra file:\n{path}", false);
+    }
+
     private async Task OpenSettingsAsync()
     {
         var updated = ShowSettingsDialog?.Invoke(_settings);
         if (updated is null) return;
         await ApplySettingsAsync(updated);
-    }
-
-    private void Login()
-    {
-        var code = ShowLoginDialog?.Invoke(_settings.Inspector);
-        if (string.IsNullOrWhiteSpace(code)) return;
-        _settings.Inspector = code.Trim();
-        TrySaveSettings();
-        OnPropertyChanged(nameof(InspectorText));
-        StatusMessage = $"Đã đăng nhập người kiểm tra: {_settings.Inspector}";
     }
 
     private async Task ApplySettingsAsync(AppSettings settings)
@@ -840,9 +973,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(CompanyLabel));
         OnPropertyChanged(nameof(ForceUnit));
-        OnPropertyChanged(nameof(InspectorText));
+        OnPropertyChanged(nameof(PlcLabel));
         OnPropertyChanged(nameof(VersionText));
         OnPropertyChanged(nameof(ConnectionText));
+        OnPropertyChanged(nameof(IsSimulation));
+        OnPropertyChanged(nameof(StartButtonText));
         OnPropertyChanged(nameof(HistogramBins));
         RaiseJudgeChanged();
 
@@ -917,7 +1052,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         IsPass = null;
         _completedResult = null;
         ResultQrText = "";
-        _unsavedResults.Clear();
     }
 
     private void TryLoadStore()

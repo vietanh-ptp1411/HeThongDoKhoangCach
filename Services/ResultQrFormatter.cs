@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HeThongDoKhoangCach.Models;
+using BeltTensionMeasurement.Models;
 
-namespace HeThongDoKhoangCach.Services;
+namespace BeltTensionMeasurement.Services;
 
 /// <summary>
 /// Tạo nội dung mã QR của kết quả đo theo mẫu trong CÀI ĐẶT, vd "{Value}" → "3.70",
@@ -14,7 +14,7 @@ public static partial class ResultQrFormatter
 
     /// <summary>Các trường dùng được trong mẫu (hiển thị ở màn cài đặt).</summary>
     public static readonly string[] Fields =
-        ["Value", "Serial", "Model", "Spec", "Lsl", "Usl", "Result", "Force", "Date", "Time", "DateTime", "Inspector"];
+        ["Value", "Serial", "Model", "Spec", "Lsl", "Usl", "Result", "Force", "Date", "Time", "DateTime", "Inspector", "Purpose", "PurposeCode"];
 
     [GeneratedRegex(@"\{(\w+)\}")]
     private static partial Regex FieldRegex();
@@ -46,6 +46,8 @@ public static partial class ResultQrFormatter
             "time" => r.InspectedAt.ToString("HH:mm:ss", inv),
             "datetime" => r.InspectedAt.ToString("yyyy-MM-dd HH:mm:ss", inv),
             "inspector" => r.Inspector,
+            "purpose" => r.Purpose,
+            "purposecode" => r.PurposeCode?.ToString(inv) ?? "",
             _ => m.Value,   // trường lạ giữ nguyên để người cài đặt thấy ngay
         });
     }
@@ -62,5 +64,7 @@ public static partial class ResultQrFormatter
         IsOk = true,
         InspectedAt = new DateTime(2026, 8, 25, 10, 30, 45),
         Inspector = "23474",
+        PurposeCode = 1,
+        Purpose = "Đo kiểm tra đặc thù hằng ngày",
     };
 }

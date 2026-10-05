@@ -2,11 +2,11 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net;
 using System.Windows.Input;
-using HeThongDoKhoangCach.Models;
-using HeThongDoKhoangCach.Services;
-using HeThongDoKhoangCach.Services.Plc;
+using BeltTensionMeasurement.Models;
+using BeltTensionMeasurement.Services;
+using BeltTensionMeasurement.Services.Plc;
 
-namespace HeThongDoKhoangCach.ViewModels;
+namespace BeltTensionMeasurement.ViewModels;
 
 public enum SettingsSection { Connection, Tags, Catalog, Qr, General }
 
@@ -78,7 +78,8 @@ public sealed class SettingsViewModel : ViewModelBase
     /// <summary>Danh mục tag: nhóm, tên hiển thị, thuộc tính trong <see cref="PlcSettings"/>, bắt buộc, getter/setter.</summary>
     private static readonly (string Group, string Name, string Key, bool Required, Func<PlcSettings, TagDefinition> Get, Action<PlcSettings, TagDefinition> Set)[] TagMap =
     [
-        ("Lệnh", "START (máy chạy)", nameof(PlcSettings.StartCommand), true, p => p.StartCommand, (p, t) => p.StartCommand = t),
+        ("START", "App → PLC: START (đo một lần)", nameof(PlcSettings.StartCommand), true, p => p.StartCommand, (p, t) => p.StartCommand = t),
+        ("Quy cách", "Mục đích đo (1..5)", nameof(PlcSettings.PurposeWrite), false, p => p.PurposeWrite, (p, t) => p.PurposeWrite = t),
         ("Lệnh", "STOP (tạm dừng)", nameof(PlcSettings.StopCommand), false, p => p.StopCommand, (p, t) => p.StopCommand = t),
         ("Lệnh", "RESET (xóa giá trị)", nameof(PlcSettings.ResetCommand), false, p => p.ResetCommand, (p, t) => p.ResetCommand = t),
         ("Giá trị đo", "Lực căng (Loadcell)", nameof(PlcSettings.LoadcellValue), true, p => p.LoadcellValue, (p, t) => p.LoadcellValue = t),
@@ -178,7 +179,6 @@ public sealed class SettingsViewModel : ViewModelBase
     public string Inspector { get => _draft.Inspector; set { _draft.Inspector = value; OnPropertyChanged(); } }
     public string ForceUnit { get => _draft.ForceUnit; set { _draft.ForceUnit = value; OnPropertyChanged(); } }
     public string ResultFilePath { get => _draft.ResultFilePath; set { _draft.ResultFilePath = value; OnPropertyChanged(); } }
-    public bool AutoSaveOnMeasureDone { get => _draft.AutoSaveOnMeasureDone; set { _draft.AutoSaveOnMeasureDone = value; OnPropertyChanged(); } }
     public int HistogramBins { get => _draft.HistogramBins; set { _draft.HistogramBins = value; OnPropertyChanged(); } }
 
     // ----- Kiểm tra & kết xuất -----
@@ -199,6 +199,14 @@ public sealed class SettingsViewModel : ViewModelBase
         if (TimeoutMs < 200) return "Timeout tối thiểu 200 ms.";
 
         ValidationSection = SettingsSection.Tags;
+        var acknowledge = Tags.First(t => t.Key == nameof(PlcSettings.StartCommand));
+        if (acknowledge.DataType != TagDataType.Bit) return "Lệnh START phải dùng kiểu Bit.";
+        string NormalizeAddress(string address) => address.Replace(" ", "").ToUpperInvariant();
+        if (Tags.Any(t => t.Key != acknowledge.Key && !string.IsNullOrWhiteSpace(t.Address) && NormalizeAddress(t.Address) == NormalizeAddress(acknowledge.Address)))
+            return "Bit START phải khác các tag còn lại.";
+        if (Specs.SelectMany(s => s.Models).Any(m => m.HasPlcBit &&
+            NormalizeAddress(m.PlcBit) == NormalizeAddress(acknowledge.Address)))
+            return "Bit model không được trùng bit START.";
         foreach (var row in Tags)
         {
             bool hasAddress = !string.IsNullOrWhiteSpace(row.Address);
@@ -212,7 +220,7 @@ public sealed class SettingsViewModel : ViewModelBase
 
             if (IsNetworkProtocol)
             {
-                var err = ValidateAddress(row.Address, mustBeBit: false);
+                var err = ValidateAddress(row.Address, mustBeBit: row.Group == "START");
                 if (err is not null) return $"Địa chỉ '{row.Name}' = '{row.Address}': {err}";
             }
         }
